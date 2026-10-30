@@ -47,7 +47,7 @@ segunda tela. **Nada é instalado na AWS**, não há servidor para hospedar e s�
 | ✨ **Gerar Prompt** | Monta um prompt de diagnóstico pronto para colar: erro completo, a **invocação inteira da Lambda** (ou as linhas ao redor no container), estatísticas e erros relacionados. Dados sensíveis mascarados |
 | 🔎 **Busca** | Instantânea e sem custo no texto completo dos erros coletados — ou, marcando uma caixa, em **todas** as linhas de log na AWS para achar de onde veio um id, pedido, e-mail ou código de erro |
 | 🖼 **Relatório PNG** | Um clique exporta KPIs, gráficos, alarmes e os principais erros com mensagens — ótimo para o chat da equipe ou um ticket |
-| 🔔 **Notificações** | Aviso do sistema em issue nova ou regressão |
+| 🚨 **Alarmes na tela** | Regras que você escolhe (pico, anomalia, issue nova, regressão, texto específico, alarme do CloudWatch, silêncio, coleta parada) mostram um aviso grande, com borda vermelha piscando, no meio da tela até você reconhecer — mais notificação do sistema e som opcionais. 100% local |
 | ✅ **Fluxo de trabalho** | Resolver (reabre como *Regressão* se voltar) ou Ignorar (ruído conhecido) |
 | ⏪ **Recuperação de lacunas** | O painel ficou fechado? Até 24h é recuperado sozinho; períodos maiores perguntam o que buscar — em segundo plano |
 | 🧙 **Instalação guiada** | `iniciar.bat` / `iniciar.sh` verificam e instalam Python, dependências e AWS CLI; depois um assistente configura as credenciais (mesmo sem AWS CLI) |
@@ -240,6 +240,29 @@ SQLite em uso.
 
 ---
 
+## 🚨 Alarmes na tela
+
+Deixe o painel numa segunda tela: quando uma regra dispara, um **aviso grande com borda vermelha
+piscando** ocupa o meio da tela até você reconhecer (o título da aba também pisca). Notificação do
+sistema e som são opcionais. **Nada sai da sua máquina** — os alarmes funcionam com o monitor aberto.
+
+Abra **🔔 Alarmes** no topo para ligar/desligar regras, ajustar os números, **testar** como o aviso
+aparece e ver o histórico. Regras:
+
+| Regra | Exemplo | Já vem ligada |
+|---|---|---|
+| Issue nova | um erro que nunca tinha acontecido | ✅ |
+| Regressão | um erro marcado como resolvido voltou | ✅ |
+| Alarme do CloudWatch | um alarme da sua conta entrou em ALARM | ✅ |
+| Pico | ≥ 20 erros em 10 min num serviço | — |
+| Anomalia | 3× acima da média do serviço nas últimas 24h | — |
+| Texto específico | um erro contendo `payment failed` | — |
+| Silêncio | um log group sem receber logs há 60 min (serviço parado não gera erro) | — |
+| Coleta parada | o monitor não consegue coletar há 20 min | — |
+
+Cada regra pode ser limitada a serviços/categorias, tem gravidade (crítico = vermelho, aviso = laranja)
+e um “não repetir por N minutos”. Issues ignoradas nunca disparam alarme.
+
 ## 🔒 Privacidade — seus dados ficam com você
 
 **Nenhuma informação é enviada para nenhum servidor externo.** Na prática:
@@ -344,7 +367,8 @@ HTTP da biblioteca padrão.
 iniciar.bat / iniciar.sh   inicializadores (requisitos + assistente + painel)
 configurar.py              assistente de configuração  →  .env
 app.py                     servidor local + API  (--demo, --check, --port, --no-browser)
-collector.py               coleta Logs Insights, alarmes, recuperação de lacunas, busca
+collector.py               coleta Logs Insights, alarmes do CloudWatch, recuperação de lacunas, busca
+alerts.py                  regras de alarmes na tela (avaliadas localmente a cada 30 s)
 fingerprint.py             classificação e agrupamento de erros
 prompt.py                  gerador de prompts (com mascaramento)
 demo.py                    dados fictícios do modo demonstração

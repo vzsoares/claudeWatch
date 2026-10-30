@@ -14,6 +14,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
+import alerts
 import db
 import fingerprint as fp
 import prompt as prompt_builder
@@ -36,6 +37,7 @@ EDITABLE_SETTINGS = {"interval_min", "first_lookback_hours", "auto_recover_hours
 
 collector: Collector | None = None
 DEMO = False
+alert_loop: alerts.AlertLoop | None = None
 
 
 # --------------------------------------------------------------------- consultas
@@ -244,6 +246,42 @@ def local_search(conn, text, start, end, body):
             "errors": [], "scope": "errors"}
 
 
+def api_alerts_post(conn, path, body):
+    if path == "/api/alerts/rules":
+        result = alerts.save_rule(conn, body)
+    elif m := re.fullmatch(r"/api/alerts/rules/(\d+)/delete", path):
+        conn.execute("DELETE FROM alert_rules WHERE id = ?", (int(m.group(1)),))
+        conn.commit()
+        result = {"ok": True}
+    elif m := re.fullmatch(r"/api/alerts/rules/(\d+)/toggle", path):
+        conn.execute("UPDATE alert_rules SET enabled = ? WHERE id = ?", (1 if body.get("enabled") else 0, int(m.group(1))))
+        conn.commit()
+        result = {"ok": True}
+    elif path == "/api/alerts/test":
+        alerts.test_alert(conn, int(body["rule_id"]) if body.get("rule_id") else None)
+        result = {"ok": True}
+    elif m := re.fullmatch(r"/api/alerts/(\d+)/ack", path):
+        conn.execute("UPDATE alert_events SET acknowledged_at = ? WHERE id = ? AND acknowledged_at IS NULL",
+                     (db.now_ms(), int(m.group(1))))
+        conn.commit()
+        result = {"ok": True}
+    elif path == "/api/alerts/ack-all":
+        conn.execute("UPDATE alert_events SET acknowledged_at = ? WHERE acknowledged_at IS NULL", (db.now_ms(),))
+        conn.commit()
+        result = {"ok": True}
+    elif path == "/api/alerts/settings":
+        for key in ALERT_SETTINGS:
+            if key in body:
+                db.set_setting(conn, key, "1" if body[key] else "0")
+        conn.commit()
+        result = {"ok": True}
+    else:
+        raise KeyError("rota de alarmes não encontrada")
+    if alert_loop:
+        alert_loop.trigger()  # reavalia na hora (ex.: regra recém-ligada)
+    return result
+
+
 def api_issues_new(conn, qs):
     since = int(qs.get("since", "0"))
     return {"items": db.rows(conn.execute(
@@ -277,6 +315,26 @@ def api_event(conn, event_id):
     return dict(row) if row else None
 
 
+ALERT_SETTINGS = {"alert_notify": "1", "alert_sound": "0"}
+
+
+def alerts_summary(conn) -> dict:
+    """Alertas não reconhecidos das últimas 24h (o painel mostra o mais recente no meio da tela)."""
+    active = db.rows(conn.execute(
+        "SELECT * FROM alert_events WHERE acknowledged_at IS NULL AND ts >= ? ORDER BY ts DESC LIMIT 20",
+        (db.now_ms() - 86_400_000,)))
+    s = db.get_settings(conn)
+    return {"active": active, "notify": s.get("alert_notify", "1") == "1", "sound": s.get("alert_sound", "0") == "1"}
+
+
+def api_alerts(conn) -> dict:
+    alerts.ensure_presets(conn)
+    history = db.rows(conn.execute("SELECT * FROM alert_events ORDER BY ts DESC LIMIT 50"))
+    groups = [r[0] for r in conn.execute("SELECT name FROM log_groups ORDER BY name")]
+    return {"rules": alerts.list_rules(conn), "history": history, "kinds": alerts.KINDS,
+            "categories": fp.CATEGORIES, "log_groups": groups, **alerts_summary(conn)}
+
+
 def api_status(conn):
     last_run = conn.execute("SELECT * FROM runs WHERE kind = 'live' AND status != 'running' "
                             "ORDER BY id DESC LIMIT 1").fetchone()
@@ -291,6 +349,7 @@ def api_status(conn):
         "groups_monitored": conn.execute("SELECT COUNT(*) FROM log_groups").fetchone()[0],
         "backfill": collector.backfill_status(conn) if collector else None,
         "demo": DEMO,
+        "alerts": alerts_summary(conn),
         "last_window_end": int(s["last_window_end"]) if s.get("last_window_end") else None,
     }
 
@@ -424,6 +483,8 @@ class Handler(BaseHTTPRequestHandler):
                             "WHEN 'INSUFFICIENT_DATA' THEN 1 ELSE 2 END, name")),
                         "history": db.rows(conn.execute(
                             "SELECT * FROM alarm_history ORDER BY ts DESC LIMIT 30"))})
+                if path == "/api/alerts":
+                    return self._send(200, api_alerts(conn))
                 if path == "/api/runs":
                     return self._send(200, {"items": db.rows(conn.execute(
                         "SELECT * FROM runs ORDER BY id DESC LIMIT 50"))})
@@ -471,6 +532,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(200, collector.backfill_status(conn))
                 if path == "/api/search":
                     return self._send(200, api_search(conn, self._body()))
+                if path.startswith("/api/alerts"):
+                    return self._send(200, api_alerts_post(conn, path, self._body()))
                 if collector is None and path.startswith(("/api/search/", "/api/backfill")):
                     b = self._body()
                     if path == "/api/search/prompt":
@@ -559,7 +622,7 @@ def main():
     logging.getLogger("botocore").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.ERROR)
 
-    global collector, DEMO, DB_PATH
+    global collector, DEMO, DB_PATH, alert_loop
     if args.demo:
         import demo
         DEMO = True
@@ -573,6 +636,8 @@ def main():
         db.init()
         collector = Collector()
         collector.start()
+    alert_loop = alerts.AlertLoop(collector)
+    alert_loop.start()
 
     server = ThreadingHTTPServer((HOST, args.port), Handler)
     url = f"http://{HOST}:{args.port}/"

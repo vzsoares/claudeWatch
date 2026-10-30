@@ -370,6 +370,7 @@ async function pollStatus() {
     state.collector = c;
     renderCollector();
     renderBackfill(s.backfill);
+    if (typeof onAlerts === "function") onAlerts(s.alerts);  // alarmes na tela (alerts.js)
   } catch {
     const el = $("collectorStatus");
     el.className = "collector error";

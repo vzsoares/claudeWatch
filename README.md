@@ -47,7 +47,7 @@ second screen. **Nothing is installed in AWS**, there's no server to host, and i
 | ✨ **Generate Prompt** | Builds a ready-to-paste diagnosis prompt: full error, the **entire Lambda invocation** (or surrounding container lines), stats and related errors. Secrets masked by default |
 | 🔎 **Search** | Instant, free search in the full text of collected errors — or, with one checkbox, in **every** log line on AWS to find where an order id, e-mail or error code came from |
 | 🖼 **PNG report** | One click exports KPIs, charts, alarms and top errors with messages — great for chat or tickets |
-| 🔔 **Notifications** | Desktop notification for new issues and regressions |
+| 🚨 **On-screen alarms** | Rules you choose (spike, anomaly, new issue, regression, text match, CloudWatch alarm, silence, collection stalled) raise a big, blinking red alert in the middle of the screen until acknowledged — plus optional desktop notification and sound. 100% local |
 | ✅ **Workflow** | Resolve (reopens as *Regression* if it comes back) or Ignore (known noise) |
 | ⏪ **Gap recovery** | Was the app closed? Up to 24h is recovered automatically; longer gaps ask what to fetch — and run in the background |
 | 🧙 **Zero-config setup** | `iniciar.bat` / `iniciar.sh` checks and installs Python, dependencies and the AWS CLI, then a console wizard configures credentials (even without the AWS CLI) |
@@ -221,6 +221,29 @@ Each result has **Open issue**, **View context** (the whole Lambda invocation or
 **✨ Generate Prompt**, AWS Console link and copy. Options: period, log-group filter, whole word,
 case-sensitive and regex.
 
+## 🚨 On-screen alarms
+
+Leave the dashboard on a second screen: when a rule fires, a **large alert with a blinking red border**
+takes the middle of the screen until you acknowledge it (the tab title blinks too). Optional desktop
+notification and sound. **Nothing leaves your machine** — alarms work while the monitor is open.
+
+Open **🔔 Alarms** at the top to turn rules on/off, edit thresholds, **test** how the alert looks and
+see the history. Rules:
+
+| Rule | Example | On by default |
+|---|---|---|
+| New issue | an error that never happened before | ✅ |
+| Regression | an error you marked as resolved came back | ✅ |
+| CloudWatch alarm | an alarm of your account went to ALARM | ✅ |
+| Spike | ≥ 20 errors in 10 min in one service | — |
+| Anomaly | 3× above the service's 24h average | — |
+| Text match | an error containing `payment failed` | — |
+| Silence | a log group stopped receiving logs for 60 min (a dead service doesn't log errors) | — |
+| Collection stalled | the monitor couldn't collect for 20 min | — |
+
+Each rule can be limited to services/categories, has a severity (critical = red, warning = amber) and
+a “don't repeat for N minutes” setting. Ignored issues never fire alarms.
+
 ## 🔒 Privacy — your data stays with you
 
 **No information is sent to any external server.** Concretely:
@@ -279,7 +302,8 @@ Exception / Error), stored in SQLite and served by a small standard-library HTTP
 iniciar.bat / iniciar.sh   launchers (requirements check + wizard + start)
 configurar.py              setup wizard  →  .env
 app.py                     local HTTP server + API  (--demo, --check, --port, --no-browser)
-collector.py               Logs Insights collection, alarms, gap recovery, search
+collector.py               Logs Insights collection, CloudWatch alarms, gap recovery, search
+alerts.py                  on-screen alarm rules (evaluated locally every 30 s)
 fingerprint.py             error classification and grouping
 prompt.py                  prompt builder (with secret masking)
 demo.py                    fictional data for demo mode

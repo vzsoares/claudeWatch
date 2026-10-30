@@ -27,6 +27,7 @@
       <select id="intervalSelect" aria-label="Intervalo de coleta"></select>
     </label>
     <button class="btn primary" id="openSearch" title="Procurar qualquer texto em todos os logs (atalho: /)">🔎 Buscar nos logs</button>
+    <button class="btn alarms-btn" id="openAlarms" title="Alarmes na tela">🔔 Alarmes<span class="badge hidden" id="alarmBadge">0</span></button>
     <button class="btn" id="collectNow">↻ Coletar agora</button>
     <button class="btn icon" id="themeToggle" title="Tema claro/escuro" aria-label="Alternar tema">◐</button>
     <button class="btn icon" id="openSettings" title="Configurações" aria-label="Configurações">⚙</button>
@@ -282,9 +283,81 @@
   </div>
 </div>
 
+<!-- Aviso de alarme: aparece no meio da tela, com borda piscando, até ser reconhecido -->
+<div class="alert-overlay hidden" id="alertOverlay" role="alertdialog" aria-modal="true" aria-labelledby="alertTitle" aria-describedby="alertDetail">
+  <div class="alert-box" id="alertBox">
+    <div class="alert-head"><span class="alert-icon" aria-hidden="true">🚨</span><span class="alert-rule" id="alertRule"></span></div>
+    <h2 id="alertTitle"></h2>
+    <p id="alertDetail"></p>
+    <div class="alert-meta" id="alertMeta"></div>
+    <div class="alert-actions">
+      <button class="btn" id="alertView">🔍 Ver issue</button>
+      <button class="btn" id="alertSnooze" title="Esconde o aviso por 10 minutos sem reconhecer">⏰ Lembrar em 10 min</button>
+      <button class="btn" id="alertAckAll">Reconhecer todos</button>
+      <button class="btn primary" id="alertAck">✓ Reconhecer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Configuração dos alarmes -->
+<div class="modal" id="alarmsModal" role="dialog" aria-modal="true" aria-labelledby="alarmsTitle">
+  <div class="modal-box wide">
+    <div class="modal-head">
+      <h2 id="alarmsTitle">🔔 Alarmes na tela</h2>
+      <button class="btn icon" data-close aria-label="Fechar">✕</button>
+    </div>
+    <p class="muted small">Quando uma regra ligada dispara, aparece um aviso no meio da tela, com borda piscando, até você
+      reconhecer. Funciona enquanto o monitor estiver aberto. <strong>Nada é enviado para fora da sua máquina.</strong></p>
+
+    <div class="alarm-prefs">
+      <label class="check"><input type="checkbox" id="alarmNotify"> Também mostrar notificação do sistema (Windows/Mac)</label>
+      <label class="check"><input type="checkbox" id="alarmSound"> Tocar um som</label>
+      <button class="btn" id="alarmTestGeneric">▶ Ver como fica o aviso</button>
+    </div>
+
+    <div class="card-head alarm-rules-head">
+      <h3 class="sub">Regras</h3>
+      <span class="muted small">ligue as que quiser</span>
+      <span class="spacer"></span>
+      <button class="btn primary" id="alarmNew">＋ Novo alarme</button>
+    </div>
+    <ul class="alarm-rules" id="alarmRules"></ul>
+
+    <form class="alarm-form hidden" id="alarmForm" autocomplete="off">
+      <h3 class="sub" id="alarmFormTitle">Novo alarme</h3>
+      <input type="hidden" name="id">
+      <div class="row3">
+        <label>Tipo<select name="kind" id="alarmKind"></select></label>
+        <label>Nome<input name="name" placeholder="ex.: Pico no checkout"></label>
+        <label>Gravidade<select name="severity"><option value="critical">Crítico (vermelho)</option><option value="warning">Aviso (amarelo)</option></select></label>
+      </div>
+      <div class="alarm-kind-help muted small" id="alarmKindHelp"></div>
+      <div class="row3" id="alarmParams"></div>
+      <div class="row3" id="alarmFilters">
+        <label>Só serviços contendo <span class="muted small">(opcional)</span><input name="service" placeholder="ex.: checkout"></label>
+        <label>Só a categoria <span class="muted small">(opcional)</span><select name="category"><option value="">Todas</option></select></label>
+        <label>Não repetir por (min) <span class="muted small">0 = avisar uma vez</span><input type="number" name="cooldown_min" min="0" max="1440"></label>
+      </div>
+      <datalist id="alarmGroups"></datalist>
+      <div class="settings-msg" id="alarmFormMsg"></div>
+      <div class="modal-foot">
+        <button type="button" class="btn" id="alarmCancel">Cancelar</button>
+        <button type="submit" class="btn primary">Salvar alarme</button>
+      </div>
+    </form>
+
+    <h3 class="sub">Últimos disparos</h3>
+    <div class="table-wrap runs-wrap">
+      <table class="runs"><thead><tr><th>Quando</th><th>Alarme</th><th>O que aconteceu</th><th>Reconhecido</th></tr></thead>
+        <tbody id="alarmHistory"></tbody></table>
+    </div>
+  </div>
+</div>
+
 <div class="toasts" id="toasts" aria-live="polite"></div>
 <script src="app.js"></script>
 <script src="report.js"></script>
 <script src="search.js"></script>
+<script src="alerts.js"></script>
 </body>
 </html>

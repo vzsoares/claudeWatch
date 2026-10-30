@@ -76,6 +76,34 @@ CREATE TABLE IF NOT EXISTS alarms (
     seen_at          INTEGER
 );
 
+-- Alertas na tela do monitor (regras do usuário + disparos)
+CREATE TABLE IF NOT EXISTS alert_rules (
+    id           INTEGER PRIMARY KEY,
+    name         TEXT NOT NULL,
+    kind         TEXT NOT NULL,          -- new_issue | regression | spike | anomaly | match | cw_alarm | stalled
+    enabled      INTEGER NOT NULL DEFAULT 0,
+    severity     TEXT NOT NULL DEFAULT 'critical',   -- warning | critical
+    params       TEXT NOT NULL DEFAULT '{}',         -- JSON com os parâmetros da regra
+    cooldown_min INTEGER NOT NULL DEFAULT 30,
+    created_at   INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS alert_events (
+    id              INTEGER PRIMARY KEY,
+    rule_id         INTEGER,
+    rule_name       TEXT NOT NULL,
+    severity        TEXT NOT NULL,
+    title           TEXT NOT NULL,
+    detail          TEXT,
+    fingerprint     TEXT,                -- issue relacionada (para "Ver issue")
+    service         TEXT,
+    dedupe_key      TEXT,
+    ts              INTEGER NOT NULL,
+    acknowledged_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS ix_alert_events_ts ON alert_events(ts);
+CREATE INDEX IF NOT EXISTS ix_alert_events_key ON alert_events(rule_id, dedupe_key, ts);
+
 CREATE TABLE IF NOT EXISTS alarm_history (
     id        INTEGER PRIMARY KEY,
     name      TEXT NOT NULL,

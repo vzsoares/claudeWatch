@@ -260,6 +260,12 @@ aparece e ver o histórico. Regras:
 | Silêncio | um log group sem receber logs há 60 min (serviço parado não gera erro) | — |
 | Coleta parada | o monitor não consegue coletar há 20 min | — |
 
+**Clique em qualquer alarme** (no cartão de alarmes do CloudWatch ou em “ℹ O que significa?” no aviso) para ver,
+em linguagem simples, **o que é, por que disparou (valor medido × limite), se é grave e o que fazer** — com
+botões para ver os erros do serviço relacionado, abrir no console da AWS ou gerar um prompt para o Claude.
+Alarmes de auto scaling (`TargetTracking-*`), que ficam em ALARM boa parte do tempo por design, aparecem com
+selo neutro e não disparam aviso na tela (dá para incluir por regra).
+
 Cada regra pode ser limitada a serviços/categorias, tem gravidade (crítico = vermelho, aviso = laranja)
 e um “não repetir por N minutos”. Issues ignoradas nunca disparam alarme.
 

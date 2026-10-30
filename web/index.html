@@ -291,6 +291,7 @@
     <p id="alertDetail"></p>
     <div class="alert-meta" id="alertMeta"></div>
     <div class="alert-actions">
+      <button class="btn" id="alertExplain">ℹ O que significa?</button>
       <button class="btn" id="alertView">🔍 Ver issue</button>
       <button class="btn" id="alertSnooze" title="Esconde o aviso por 10 minutos sem reconhecer">⏰ Lembrar em 10 min</button>
       <button class="btn" id="alertAckAll">Reconhecer todos</button>
@@ -354,10 +355,27 @@
   </div>
 </div>
 
+<!-- Entendendo o alarme -->
+<div class="modal" id="explainModal" role="dialog" aria-modal="true" aria-labelledby="explainTitle">
+  <div class="modal-box explain-box">
+    <div class="modal-head">
+      <h2 id="explainTitle"></h2>
+      <button class="btn icon" data-close aria-label="Fechar">✕</button>
+    </div>
+    <div id="explainBadge"></div>
+    <div class="explain-level" id="explainLevel"></div>
+    <section><h3>O que é</h3><p id="explainWhat"></p></section>
+    <section id="explainWhyBox"><h3>Por que disparou</h3><div id="explainWhy"></div></section>
+    <section><h3>O que fazer</h3><ol id="explainTodo"></ol></section>
+    <div class="modal-foot explain-actions" id="explainActions"></div>
+  </div>
+</div>
+
 <div class="toasts" id="toasts" aria-live="polite"></div>
 <script src="app.js"></script>
 <script src="report.js"></script>
 <script src="search.js"></script>
 <script src="alerts.js"></script>
+<script src="explain.js"></script>
 </body>
 </html>

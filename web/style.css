@@ -408,6 +408,27 @@ h3.sub { margin-top: 4px; }
 .alarm-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--ink-2); }
 .alarm-form .check { flex-direction: row; }
 
+/* ---------- entendendo o alarme ---------- */
+.alarms li.alarm-item { cursor: pointer; border-radius: 8px; padding-left: 6px; padding-right: 6px; }
+.alarms li.alarm-item:hover, .alarms li.alarm-item:focus-visible { background: var(--surface-2); }
+.explain-box { width: min(760px, 100%); }
+#explainModal { z-index: 85; }   /* por cima do aviso de alarme */
+.explain-box h2 { font-size: 20px; }
+.explain-box section h3 { font-size: 14px; color: var(--ink); margin: 0 0 6px; }
+.explain-box section p, .explain-box ol { margin: 0; font-size: 15px; line-height: 1.55; }
+.explain-box ol { padding-left: 22px; display: flex; flex-direction: column; gap: 4px; }
+#explainWhy { font-size: 15px; display: flex; flex-direction: column; gap: 4px; }
+.explain-level {
+  display: inline-flex; align-items: center; gap: 8px; align-self: flex-start;
+  font-weight: 700; font-size: 15px; padding: 8px 14px; border-radius: 10px; border: 2px solid;
+}
+.explain-level .ic { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; color: #fff; font-size: 13px; }
+.explain-level.good { border-color: var(--good); } .explain-level.good .ic { background: var(--good); }
+.explain-level.neutral { border-color: var(--muted); } .explain-level.neutral .ic { background: var(--muted); }
+.explain-level.warning { border-color: var(--warning); } .explain-level.warning .ic { background: var(--warning); color: #000; }
+.explain-level.critical { border-color: var(--critical); } .explain-level.critical .ic { background: var(--critical); }
+.explain-actions { flex-wrap: wrap; }
+
 /* ---------- toasts ---------- */
 .toasts { position: fixed; bottom: 16px; right: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 60; }
 .toast {

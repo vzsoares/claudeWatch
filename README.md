@@ -241,6 +241,12 @@ see the history. Rules:
 | Silence | a log group stopped receiving logs for 60 min (a dead service doesn't log errors) | — |
 | Collection stalled | the monitor couldn't collect for 20 min | — |
 
+**Click any alarm** (in the CloudWatch alarms card or “ℹ What does it mean?” on the alert) to see, in plain
+language, **what it is, why it fired (measured value × threshold), how serious it is and what to do** — with
+buttons to see the related service's errors, open it in the AWS console or generate a Claude prompt.
+Auto scaling alarms (`TargetTracking-*`), which sit in ALARM most of the time by design, are shown with a
+neutral badge and never fire on-screen alerts (opt-in per rule).
+
 Each rule can be limited to services/categories, has a severity (critical = red, warning = amber) and
 a “don't repeat for N minutes” setting. Ignored issues never fire alarms.
 

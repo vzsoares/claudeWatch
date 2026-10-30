@@ -218,6 +218,7 @@ function hbar(key, canvasId, rows, labelOf, onPick, selected) {
 }
 
 function renderBreakdown(data) {
+  state.knownServices = [...new Set([...(state.knownServices || []), ...data.services.map((s) => s.name)])];
   $("servicesBox").style.height = `${Math.max(140, data.services.length * 26 + 40)}px`;
   hbar("services", "servicesChart", data.services, (r) => r.name, (r) => setFilter("service", r.name), state.service);
   hbar("categories", "categoriesChart", data.categories, (r) => r.label, (r) => setFilter("category", r.name), state.category);
@@ -257,11 +258,15 @@ function renderSummary(s) {
 
 function renderAlarms(data) {
   const items = data.items;
-  const bad = items.filter((a) => a.state === "ALARM").length;
-  $("alarmsCount").textContent = items.length ? `${bad} em alarme · ${items.length} no total` : "";
-  $("kAlarmsSub").textContent = items.length ? `de ${items.length} alarmes` : "nenhum alarme";
+  state.alarmItems = items;
+  const bad = items.filter((a) => a.state === "ALARM" && !a.autoscaling).length;
+  const auto = items.filter((a) => a.autoscaling).length;
+  $("alarmsCount").textContent = items.length ? `${bad} em alarme · ${items.length} no total${auto ? ` (${auto} de auto scaling)` : ""}` : "";
+  $("kAlarmsSub").textContent = items.length ? `de ${items.length - auto} alarmes` : "nenhum alarme";
+  // alarmes de auto scaling (Target Tracking) ficam em ALARM o tempo todo: selo neutro, não vermelho
   $("alarmsList").innerHTML = items.length ? items.map((a) => `
-    <li>${(ALARM_BADGE[a.state] || (() => statusBadge("neutral", a.state, "?")))()}
+    <li class="alarm-item" data-name="${esc(a.name)}" tabindex="0" title="Clique para entender este alarme">
+      ${a.autoscaling ? statusBadge("neutral", "Auto scaling", "↕") : (ALARM_BADGE[a.state] || (() => statusBadge("neutral", a.state, "?")))()}
       <div><div class="alarm-name">${esc(a.name)}</div>
       <div class="alarm-meta">${esc(a.namespace)} · ${esc(a.metric)} · desde ${fmtTime(a.state_updated_at)}</div></div>
     </li>`).join("") : `<li class="muted">Nenhum alarme configurado.</li>`;
@@ -569,6 +574,11 @@ async function generatePrompt() {
     const mask = $("maskToggle").checked ? "1" : "0";
     // origem do prompt: uma issue (painel de detalhe) ou uma linha achada na busca
     const src = state.promptSource || { kind: "issue" };
+    if (src.kind === "text") {
+      $("promptText").value = src.text;
+      $("promptInfo").textContent = `${nf.format(src.text.length)} caracteres`;
+      return;
+    }
     const { prompt } = src.kind === "line"
       ? await api("/api/search/prompt", { method: "POST", body: { ...src.item, mask: mask === "1" } })
       : await api(`/api/issue/${state.issue}/prompt?event_id=${state.eventId || ""}&mask=${mask}`);

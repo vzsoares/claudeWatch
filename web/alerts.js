@@ -120,7 +120,7 @@ const ALARM_FIELDS = {
   spike: [["threshold", "Erros (mínimo)", 20], ["window_min", "Em quantos minutos", 10]],
   anomaly: [["factor", "Vezes acima da média", 3], ["window_min", "Janela (min)", 15], ["min_count", "Mínimo de erros", 10]],
   match: [["text", "Texto no erro", ""], ["regex", "É expressão regular", false]],
-  cw_alarm: [["alarm", "Só alarmes com nome contendo (opcional)", ""]],
+  cw_alarm: [["alarm", "Só alarmes com nome contendo (opcional)", ""], ["include_autoscaling", "Incluir alarmes de auto scaling (TargetTracking — ficam em ALARM o tempo todo)", false]],
   silence: [["group", "Log group (nome exato)", ""], ["minutes", "Sem logs há (min)", 60]],
   stalled: [["minutes", "Sem coleta há (min)", 20]],
 };

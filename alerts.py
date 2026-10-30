@@ -90,6 +90,7 @@ def _clean_params(kind: str, params: dict) -> dict:
         out.update(text=text, regex=regex)
     elif kind == "cw_alarm":
         out["alarm"] = str(params.get("alarm") or "").strip()
+        out["include_autoscaling"] = bool(params.get("include_autoscaling"))
     elif kind == "silence":
         group = str(params.get("group") or "").strip()
         if not group:
@@ -230,6 +231,9 @@ def _evaluate_rule(conn, collector, rule, p, since, now) -> int:
     elif kind == "cw_alarm":
         for a in conn.execute("SELECT * FROM alarms WHERE state = 'ALARM'"):
             if p.get("alarm") and p["alarm"].lower() not in a["name"].lower():
+                continue
+            # alarmes do auto scaling ficam em ALARM o tempo todo (é como ele decide escalar): não é problema
+            if a["name"].startswith("TargetTracking-") and not p.get("include_autoscaling"):
                 continue
             fired += _fire(conn, rule, f"Alarme do CloudWatch: {a['name']}",
                            f"{a['namespace']} · {a['metric']} — {a['reason'] or ''}"[:500],

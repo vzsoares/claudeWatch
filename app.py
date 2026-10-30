@@ -58,6 +58,21 @@ def _filters(qs, alias="e") -> tuple[str, list]:
     return sql, args
 
 
+# Alarmes que o auto scaling (Target Tracking) cria sozinho: ALARM neles é controle de capacidade, não problema.
+AUTOSCALING_PREFIX = "TargetTracking-"
+
+
+def api_alarms(conn) -> dict:
+    items = db.rows(conn.execute(
+        "SELECT * FROM alarms ORDER BY CASE WHEN name LIKE ? THEN 1 ELSE 0 END, "
+        "CASE state WHEN 'ALARM' THEN 0 WHEN 'INSUFFICIENT_DATA' THEN 1 ELSE 2 END, name",
+        (AUTOSCALING_PREFIX + "%",)))
+    for a in items:
+        a["autoscaling"] = a["name"].startswith(AUTOSCALING_PREFIX)
+    return {"items": items, "region": AWS_REGION,
+            "history": db.rows(conn.execute("SELECT * FROM alarm_history ORDER BY ts DESC LIMIT 30"))}
+
+
 def api_summary(conn, qs):
     start, _, key = _range(qs)
     span = RANGES[key][0]
@@ -77,7 +92,8 @@ def api_summary(conn, qs):
                               [start] + iargs).fetchone()[0]
     regressions = conn.execute("SELECT COUNT(*) FROM issues i WHERE status = 'open' AND regressed_at >= ?" + isql,
                                [start] + iargs).fetchone()[0]
-    alarms = conn.execute("SELECT COUNT(*) FROM alarms WHERE state = 'ALARM'").fetchone()[0]
+    alarms = conn.execute("SELECT COUNT(*) FROM alarms WHERE state = 'ALARM' AND name NOT LIKE ?",
+                          (AUTOSCALING_PREFIX + "%",)).fetchone()[0]
     return {"total": total, "previous": previous, "services": services, "open_issues": open_issues,
             "new_issues": new_issues, "regressions": regressions, "alarms_in_alarm": alarms}
 
@@ -167,6 +183,7 @@ def api_report(conn, qs):
         it["message_ts"] = ev["ts"] if ev else None
     alarms = db.rows(conn.execute(
         "SELECT name, state, namespace, metric, state_updated_at, reason FROM alarms WHERE state != 'OK' "
+        f"AND name NOT LIKE '{AUTOSCALING_PREFIX}%' "
         "ORDER BY state, name"))
     total_alarms = conn.execute("SELECT COUNT(*) FROM alarms").fetchone()[0]
     return {"issues": items, "alarms": alarms, "total_alarms": total_alarms,
@@ -321,7 +338,8 @@ ALERT_SETTINGS = {"alert_notify": "1", "alert_sound": "0"}
 def alerts_summary(conn) -> dict:
     """Alertas não reconhecidos das últimas 24h (o painel mostra o mais recente no meio da tela)."""
     active = db.rows(conn.execute(
-        "SELECT * FROM alert_events WHERE acknowledged_at IS NULL AND ts >= ? ORDER BY ts DESC LIMIT 20",
+        "SELECT e.*, r.kind AS rule_kind FROM alert_events e LEFT JOIN alert_rules r ON r.id = e.rule_id "
+        "WHERE e.acknowledged_at IS NULL AND e.ts >= ? ORDER BY e.ts DESC LIMIT 20",
         (db.now_ms() - 86_400_000,)))
     s = db.get_settings(conn)
     return {"active": active, "notify": s.get("alert_notify", "1") == "1", "sound": s.get("alert_sound", "0") == "1"}
@@ -477,12 +495,7 @@ class Handler(BaseHTTPRequestHandler):
                 if path == "/api/report":
                     return self._send(200, api_report(conn, qs))
                 if path == "/api/alarms":
-                    return self._send(200, {
-                        "items": db.rows(conn.execute(
-                            "SELECT * FROM alarms ORDER BY CASE state WHEN 'ALARM' THEN 0 "
-                            "WHEN 'INSUFFICIENT_DATA' THEN 1 ELSE 2 END, name")),
-                        "history": db.rows(conn.execute(
-                            "SELECT * FROM alarm_history ORDER BY ts DESC LIMIT 30"))})
+                    return self._send(200, api_alarms(conn))
                 if path == "/api/alerts":
                     return self._send(200, api_alerts(conn))
                 if path == "/api/runs":

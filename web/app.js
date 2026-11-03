@@ -204,11 +204,11 @@ function hbar(key, canvasId, rows, labelOf, onPick, selected) {
   // Com filtro ativo, a barra selecionada fica forte e as outras esmaecidas (continuam clicáveis)
   const paint = (color, r) => (!selected || r.name === selected ? color : withAlpha(color, "55"));
   // warnings em amarelo: na barra própria (categorias) ou empilhados ao lado dos erros (serviços, campo "w")
-  const colors = rows.map((r) => paint(css(r.name === "warning" ? "--warning" : "--s1"), r));
+  const colors = rows.map((r) => paint(css(r.name === "warning" ? "--warning" : "--critical"), r));
   const stacked = rows.some((r) => r.w);
   const bar = { borderRadius: 4, borderSkipped: "start", barPercentage: 0.75, categoryPercentage: 0.9 };
   const datasets = stacked
-    ? [{ ...bar, label: "Erros", unit: "erros", data: rows.map((r) => r.n), backgroundColor: rows.map((r) => paint(css("--s1"), r)), borderRadius: 0 },
+    ? [{ ...bar, label: "Erros", unit: "erros", data: rows.map((r) => r.n), backgroundColor: rows.map((r) => paint(css("--critical"), r)), borderRadius: 0 },
        { ...bar, label: "⚠️ Warnings", unit: "warnings", data: rows.map((r) => r.w || 0), backgroundColor: rows.map((r) => paint(css("--warning"), r)) }]
     : [{ ...bar, data: rows.map((r) => r.n), backgroundColor: colors }];
   if (stacked) opts.plugins.legend = { display: true, position: "top", align: "end", labels: { boxWidth: 10, boxHeight: 10, color: css("--ink-2"), font: { size: 11 } } };

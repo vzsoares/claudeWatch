@@ -87,7 +87,17 @@ if exist ".env" (
 echo.
 echo Iniciando o painel... (feche esta janela ou Ctrl+C para parar)
 echo.
+rem MONITOR_LAUNCHER=1: o painel pode pedir para ser reiniciado (codigo 3) quando o codigo muda
+set "MONITOR_LAUNCHER=1"
+:run_app
 "%PYEXE%" app.py %*
+if "%ERRORLEVEL%"=="3" (
+    echo.
+    echo Codigo atualizado - reiniciando o painel...
+    echo.
+    set "MONITOR_RELOADED=1"
+    goto run_app
+)
 if errorlevel 1 pause
 exit /b
 

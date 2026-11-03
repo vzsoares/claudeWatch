@@ -348,9 +348,24 @@ function renderActiveFilters() {
 }
 
 // ------------------------------------------------------------------ status da coleta
+// Reinício automático: se o servidor reiniciou (código novo) ou as telas mudaram, recarrega a página.
+// Espera se você estiver digitando algo, para não perder o texto.
+function checkReload(s) {
+  const version = `${s.boot_id}|${s.web_version}`;
+  state.version ??= version;
+  if (version === state.version || state.reloading) return;
+  const el = document.activeElement;
+  if (el && /^(TEXTAREA|INPUT)$/.test(el.tagName) && el.value && el.type !== "checkbox") return;
+  state.reloading = true;
+  if (state.issue) history.replaceState(null, "", `#issue=${state.issue}`); // reabre a issue que estava aberta
+  toast("Monitor atualizado — recarregando a página…", "good");
+  setTimeout(() => location.reload(), 900);
+}
+
 async function pollStatus() {
   try {
     const s = await api("/api/status");
+    checkReload(s);
     state.status_ = s;
     const c = s.collector || {};
     const run = s.last_run;

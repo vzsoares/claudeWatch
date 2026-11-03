@@ -118,4 +118,14 @@ fi
 echo
 echo "Iniciando o painel... (Ctrl+C para parar)"
 echo
-exec "$VPY" app.py "$@"
+# MONITOR_LAUNCHER=1: o painel pode pedir para ser reiniciado (código 3) quando o código muda
+export MONITOR_LAUNCHER=1
+while :; do
+    "$VPY" app.py "$@" && exit 0
+    code=$?
+    [ "$code" -eq 3 ] || exit "$code"
+    echo
+    echo "Código atualizado — reiniciando o painel..."
+    echo
+    export MONITOR_RELOADED=1
+done

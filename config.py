@@ -46,6 +46,8 @@ DB_PATH = Path(_env("MONITOR_DB") or _data_dir() / "monitor.db")
 
 HOST = "127.0.0.1"
 PORT = int(_env("MONITOR_PORT", "8765"))
+# reinicia sozinho quando o código muda (só quando aberto pelo iniciar.bat/iniciar.sh)
+AUTO_RELOAD = _env("MONITOR_AUTO_RELOAD", "1") == "1"
 
 # Nome exibido no painel/relatório e o nome do sistema citado nos prompts para o Claude.
 APP_NAME = _env("MONITOR_APP_NAME", "CloudWatch Monitor")

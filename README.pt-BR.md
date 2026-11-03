@@ -192,6 +192,7 @@ Variáveis de ambiente do sistema têm prioridade.
 | `MONITOR_GROUP_INCLUDE` | — (todos) | regex: monitorar só log groups que casam |
 | `MONITOR_GROUP_EXCLUDE` | warmup, containerinsights… | regex: log groups ignorados |
 | `MONITOR_PORT` | `8765` | porta do painel |
+| `MONITOR_AUTO_RELOAD` | `1` | quando o código muda (ex.: depois de um `git pull`), reinicia o servidor e recarrega a página sozinho — só quando aberto pelo `iniciar.bat`/`iniciar.sh` |
 | `MONITOR_DB` | pasta de dados do usuário | caminho do banco SQLite |
 
 Os valores de coleta são só os **iniciais** — depois, use **⚙ Configurações** no painel.

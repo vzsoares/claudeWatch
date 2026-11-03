@@ -3,6 +3,7 @@
 Uso:  python app.py [--port 8765] [--no-browser]
 """
 import argparse
+import os
 import io
 import json
 import logging
@@ -22,7 +23,8 @@ import db
 import fingerprint as fp
 import prompt as prompt_builder
 from collector import Collector
-from config import APP_NAME, AWS_PROFILE, AWS_REGION, DB_PATH, HOST, INTERVAL_CHOICES, PORT, WEB_DIR
+import reloader
+from config import APP_NAME, AUTO_RELOAD, AWS_PROFILE, AWS_REGION, DB_PATH, HOST, INTERVAL_CHOICES, PORT, WEB_DIR
 
 log = logging.getLogger("app")
 
@@ -41,6 +43,8 @@ EDITABLE_SETTINGS = {"interval_min", "first_lookback_hours", "auto_recover_hours
 collector: Collector | None = None
 DEMO = False
 alert_loop: alerts.AlertLoop | None = None
+watcher: reloader.Reloader | None = None
+BOOT_ID = f"{time.time():.3f}"
 
 
 # --------------------------------------------------------------------- consultas
@@ -397,6 +401,9 @@ def api_status(conn):
         "backfill": collector.backfill_status(conn) if collector else None,
         "demo": DEMO,
         "alerts": alerts_summary(conn),
+        # mudou = o servidor reiniciou ou as telas mudaram: o painel recarrega a página sozinho
+        "boot_id": BOOT_ID,
+        "web_version": watcher.web_version if watcher else 0,
         "last_window_end": int(s["last_window_end"]) if s.get("last_window_end") else None,
     }
 
@@ -687,7 +694,7 @@ def main():
     logging.getLogger("botocore").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.ERROR)
 
-    global collector, DEMO, DB_PATH, alert_loop
+    global collector, DEMO, DB_PATH, alert_loop, watcher
     if args.demo:
         import demo
         DEMO = True
@@ -703,11 +710,14 @@ def main():
         collector.start()
     alert_loop = alerts.AlertLoop(collector)
     alert_loop.start()
+    if AUTO_RELOAD:
+        watcher = reloader.Reloader(collector)
+        watcher.start()
 
     server = ThreadingHTTPServer((HOST, args.port), Handler)
     url = f"http://{HOST}:{args.port}/"
     log.info("%s em %s  (profile %s, região %s, banco %s)", APP_NAME, url, AWS_PROFILE or "padrão", AWS_REGION, DB_PATH)
-    if not args.no_browser:
+    if not args.no_browser and os.environ.get("MONITOR_RELOADED") != "1":  # num reinício a aba já está aberta
         threading.Timer(1.0, lambda: webbrowser.open(url)).start()
     try:
         server.serve_forever()

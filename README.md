@@ -191,6 +191,7 @@ Real environment variables take precedence.
 | `MONITOR_GROUP_INCLUDE` | — (all) | regex: only watch matching log groups |
 | `MONITOR_GROUP_EXCLUDE` | warmup, containerinsights… | regex: ignored log groups |
 | `MONITOR_PORT` | `8765` | dashboard port |
+| `MONITOR_AUTO_RELOAD` | `1` | when the code changes (e.g. after `git pull`), restart the server and reload the page by itself — only when started via `iniciar.bat`/`iniciar.sh` |
 | `MONITOR_DB` | user data folder | SQLite database path |
 
 Collection values are only the **initial** ones — afterwards, use **⚙ Settings** in the dashboard.

@@ -1,9 +1,6 @@
 // "Baixar logs": todas as ocorrências guardadas num período, em .txt (padrão: últimos 7 dias).
 
-const toLocalInput = (ms) => {
-  const d = new Date(ms - new Date(ms).getTimezoneOffset() * 60_000);
-  return d.toISOString().slice(0, 16);
-};
+// toLocalInput() vem do app.js
 
 function exportParams() {
   const f = $("exportForm").elements;

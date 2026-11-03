@@ -49,6 +49,8 @@ segunda tela. **Nada é instalado na AWS**, não há servidor para hospedar e s�
 | 🖼 **Relatório PNG** | Um clique exporta KPIs, gráficos, alarmes e os principais erros com mensagens — ótimo para o chat da equipe ou um ticket |
 | 🚨 **Alarmes na tela** | Regras que você escolhe (pico, anomalia, issue nova, regressão, texto específico, alarme do CloudWatch, silêncio, coleta parada) mostram um aviso grande, com borda vermelha piscando, no meio da tela até você reconhecer — mais notificação do sistema e som opcionais. 100% local |
 | ✅ **Fluxo de trabalho** | Resolver (reabre como *Regressão* se voltar) ou Ignorar (ruído conhecido) |
+| ⚠️ **Warning não é erro** | Avisos (nível WARN, `(node:N) …Warning` do Node, `DeprecationWarning`…) ganham a categoria *Warning*: aparecem na lista de issues, mas ficam fora dos totais, gráficos, relatório e alarmes de erro |
+| ⬇ **Baixar logs** | Todas as ocorrências guardadas num período (padrão: últimos 7 dias) em `.txt`, e o log completo de uma issue pelo painel de detalhe |
 | 🚫 **Lista de bloqueio** | *Ignorar sempre* um falso alarme (pela issue ou por texto), com justificativa obrigatória: é descartado na coleta, não aparece nem conta como erro, até você remover da lista |
 | ⏪ **Recuperação de lacunas** | O painel ficou fechado? Até 24h é recuperado sozinho; períodos maiores perguntam o que buscar — em segundo plano |
 | 🧙 **Instalação guiada** | `iniciar.bat` / `iniciar.sh` verificam e instalam Python, dependências e AWS CLI; depois um assistente configura as credenciais (mesmo sem AWS CLI) |

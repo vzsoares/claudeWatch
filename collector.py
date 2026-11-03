@@ -574,6 +574,48 @@ def ingest(conn, rows: list[dict], settings: dict, fetch_block=None, backfill: b
     return {"events_new": events_new, "issues_new": issues_new}
 
 
+def reclassify_warnings(conn) -> int:
+    """Uma vez só: ocorrências já guardadas que são avisos passam para a categoria Warning.
+    Nada é apagado — cada aviso vai para a issue de warning correspondente (a mesma que a coleta usa daqui em
+    diante), e a issue antiga some só se ficar sem nenhuma ocorrência."""
+    if db.get_settings(conn).get("warnings_reclassified") == "1":
+        return 0
+    moved: dict[str, int] = {}
+    for e in conn.execute("SELECT id, fingerprint, service, message, ts FROM events WHERE category != 'warning'"
+                          ).fetchall():
+        if not fp.is_warning(e["message"]):
+            continue
+        old = conn.execute("SELECT * FROM issues WHERE fingerprint = ?", (e["fingerprint"],)).fetchone()
+        title = fp.extract_title(e["message"])
+        new_fp = fp.fingerprint(e["service"], "warning", title)
+        conn.execute("UPDATE events SET category = 'warning', fingerprint = ? WHERE id = ?", (new_fp, e["id"]))
+        if not conn.execute("UPDATE issues SET count = count + 1, first_seen = MIN(first_seen, ?), "
+                            "last_seen = MAX(last_seen, ?) WHERE fingerprint = ?",
+                            (e["ts"], e["ts"], new_fp)).rowcount:
+            # herda status e data da issue de origem: não vira "issue nova" nem dispara alarme
+            conn.execute(
+                "INSERT INTO issues(fingerprint, title, category, service, log_group, first_seen, last_seen, count, "
+                "status, created_at, resolved_at) VALUES (?,?,'warning',?,?,?,?,1,?,?,?)",
+                (new_fp, title, e["service"], old["log_group"] if old else "", e["ts"], e["ts"],
+                 old["status"] if old else "open", old["created_at"] if old else db.now_ms(),
+                 old["resolved_at"] if old else None))
+        moved[e["fingerprint"]] = moved.get(e["fingerprint"], 0) + 1
+    for old_fp, n in moved.items():
+        left = conn.execute("SELECT COUNT(*), MIN(ts), MAX(ts) FROM events WHERE fingerprint = ?", (old_fp,)).fetchone()
+        if left[0] == 0:
+            conn.execute("DELETE FROM issues WHERE fingerprint = ?", (old_fp,))
+        else:
+            conn.execute("UPDATE issues SET count = MAX(count - ?, ?), first_seen = ?, last_seen = ? "
+                         "WHERE fingerprint = ?", (n, left[0], left[1], left[2], old_fp))
+    db.set_setting(conn, "warnings_reclassified", "1")
+    conn.commit()
+    total = sum(moved.values())
+    if total:
+        log.info("%d ocorrências já guardadas eram avisos: agora estão na categoria Warning (fora das estatísticas)",
+                 total)
+    return total
+
+
 def purge(conn, retention_days: int) -> None:
     cutoff = db.now_ms() - retention_days * 86_400_000
     conn.execute("DELETE FROM events WHERE ts < ?", (cutoff,))

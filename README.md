@@ -49,6 +49,8 @@ second screen. **Nothing is installed in AWS**, there's no server to host, and i
 | 🖼 **PNG report** | One click exports KPIs, charts, alarms and top errors with messages — great for chat or tickets |
 | 🚨 **On-screen alarms** | Rules you choose (spike, anomaly, new issue, regression, text match, CloudWatch alarm, silence, collection stalled) raise a big, blinking red alert in the middle of the screen until acknowledged — plus optional desktop notification and sound. 100% local |
 | ✅ **Workflow** | Resolve (reopens as *Regression* if it comes back) or Ignore (known noise) |
+| ⚠️ **Warnings ≠ errors** | Warnings (WARN level, Node `(node:N) …Warning`, `DeprecationWarning`…) get their own *Warning* category: listed with the issues, but kept out of error totals, charts, the report and alarms |
+| ⬇ **Download logs** | Every stored occurrence in a date range (default: last 7 days) as a `.txt`, plus the full log of a single issue from its detail panel |
 | 🚫 **Blocklist** | *Ignore forever* a false alarm (by issue or by text), with a mandatory justification: it is dropped at collection time, never shown or counted, until you remove it from the list |
 | ⏪ **Gap recovery** | Was the app closed? Up to 24h is recovered automatically; longer gaps ask what to fetch — and run in the background |
 | 🧙 **Zero-config setup** | `iniciar.bat` / `iniciar.sh` checks and installs Python, dependencies and the AWS CLI, then a console wizard configures credentials (even without the AWS CLI) |

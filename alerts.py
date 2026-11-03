@@ -157,8 +157,11 @@ def _fire(conn, rule: dict, title: str, detail: str, key: str, fingerprint: str 
     return True
 
 
-def _event_filter(params: dict, alias: str = "e") -> tuple[str, list]:
+def _event_filter(params: dict, alias: str = "e", errors_only: bool = True) -> tuple[str, list]:
+    """Warnings não disparam alarmes de erro, a menos que a regra escolha a categoria Warning."""
     sql, args = "", []
+    if errors_only and not params.get("category"):
+        sql += f" AND {alias}.category != 'warning'"
     if params.get("service"):
         sql += f" AND {alias}.service LIKE ?"
         args.append(f"%{params['service']}%")
@@ -223,8 +226,8 @@ def _evaluate_rule(conn, collector, rule, p, since, now) -> int:
             if n < int(p.get("min_count", 10)):
                 continue
             base_total = conn.execute(
-                "SELECT COUNT(*) FROM events e WHERE e.service = ? AND e.ts >= ? AND e.ts < ?" + _not_ignored(),
-                (service, now - 86_400_000, now - window)).fetchone()[0]
+                "SELECT COUNT(*) FROM events e WHERE e.service = ? AND e.ts >= ? AND e.ts < ?" + esql + _not_ignored(),
+                [service, now - 86_400_000, now - window] + eargs).fetchone()[0]
             baseline = base_total / buckets if buckets > 0 else 0
             if n >= float(p.get("factor", 3)) * max(baseline, 1):
                 times = f"{n / max(baseline, 1):.1f}×" if baseline >= 1 else "muito"
@@ -234,7 +237,7 @@ def _evaluate_rule(conn, collector, rule, p, since, now) -> int:
 
     elif kind == "match":
         rx = re.compile(p["text"] if p.get("regex") else re.escape(p["text"]), re.IGNORECASE)
-        esql, eargs = _event_filter(p)
+        esql, eargs = _event_filter(p, errors_only=False)
         for e in conn.execute("SELECT e.* FROM events e WHERE e.collected_at > ?" + esql + _not_ignored()
                               + " ORDER BY e.ts DESC LIMIT 2000", [since] + eargs):
             if rx.search(e["message"]):

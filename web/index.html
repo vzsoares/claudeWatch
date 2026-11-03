@@ -27,6 +27,7 @@
       <select id="intervalSelect" aria-label="Intervalo de coleta"></select>
     </label>
     <button class="btn primary" id="openSearch" title="Procurar qualquer texto em todos os logs (atalho: /)">🔎 Buscar nos logs</button>
+    <button class="btn" id="openExport" title="Baixar em .txt todos os logs de erro guardados num período">⬇ Baixar logs</button>
     <button class="btn alarms-btn" id="openAlarms" title="Alarmes na tela">🔔 Alarmes<span class="badge hidden" id="alarmBadge">0</span></button>
     <button class="btn icon" id="openBlacklist" title="Lista de bloqueio (falsos alarmes)" aria-label="Lista de bloqueio">🚫</button>
     <button class="btn" id="collectNow">↻ Coletar agora</button>
@@ -359,6 +360,39 @@
 </div>
 
 <!-- Entendendo o alarme -->
+<!-- Baixar todos os logs -->
+<div class="modal" id="exportModal" role="dialog" aria-modal="true" aria-labelledby="exportTitle">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h2 id="exportTitle">⬇ Baixar logs</h2>
+      <button class="btn icon" data-close aria-label="Fechar">✕</button>
+    </div>
+    <form class="alarm-form" id="exportForm" autocomplete="off">
+      <p class="muted small">Todas as ocorrências guardadas no monitor no período, em um arquivo .txt: um resumo por issue
+        no topo e depois cada log completo, em ordem de horário. Sai do banco local — não consulta a AWS nem gera custo.</p>
+      <div class="row2">
+        <label>Início<input type="datetime-local" name="from" required></label>
+        <label>Fim<input type="datetime-local" name="to" required></label>
+      </div>
+      <div class="export-quick">
+        <span class="muted small">Atalhos:</span>
+        <button type="button" class="chip" data-days="1">24h</button>
+        <button type="button" class="chip" data-days="7">7 dias</button>
+        <button type="button" class="chip" data-days="30">30 dias</button>
+      </div>
+      <label class="check"><input type="checkbox" name="warnings" checked> Incluir ⚠️ warnings</label>
+      <label class="check"><input type="checkbox" name="ignored"> Incluir issues ignoradas</label>
+      <label class="check hidden" id="exportFiltersWrap"><input type="checkbox" name="filters" checked> <span id="exportFiltersLabel"></span></label>
+      <div class="export-count" id="exportCount">…</div>
+      <div class="settings-msg" id="exportMsg"></div>
+      <div class="modal-foot">
+        <button type="button" class="btn" data-close>Cancelar</button>
+        <button type="submit" class="btn primary" id="exportGo">⬇ Baixar .txt</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <!-- Ignorar sempre (uma issue) -->
 <div class="modal" id="blockModal" role="dialog" aria-modal="true" aria-labelledby="blockTitle">
   <div class="modal-box">
@@ -433,5 +467,6 @@
 <script src="alerts.js"></script>
 <script src="explain.js"></script>
 <script src="blacklist.js"></script>
+<script src="export.js"></script>
 </body>
 </html>

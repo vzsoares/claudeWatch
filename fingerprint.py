@@ -47,6 +47,7 @@ CATEGORIES = {
     "fatal": "Fatal / Crash",
     "exception": "Exceção",
     "error": "Erro",
+    "warning": "Warning",  # aparece na lista de issues, mas não entra nas estatísticas de erro
 }
 
 
@@ -54,11 +55,36 @@ CATEGORIES = {
 _SEVERE_ANYWAY = re.compile(r"statuscode\W{0,3}5\d\d|status: 5\d\d|task timed out|status: timeout", re.I)
 
 
+# Avisos (warnings): nível WARN explícito ou avisos de runtime. O Lambda marca como ERROR tudo que vai para o
+# stderr, então "(node:2) MaxListenersExceededWarning" chega com nível ERROR, mas é só um aviso.
+_WARNING = re.compile(
+    r"^\s*\[?(WARN|WARNING)\]?[\s:\t]"
+    r"|^[^\n]{0,80}?\t(WARN|WARNING)\t"
+    r"|\"(level|severity|levelname)\"\s*:\s*\"(warn|warning)\""
+    r"|\"level\"\s*:\s*40\b"                      # pino: 40 = warn
+    r"|\blevel=(warn|warning)\b"
+    r"|^\S+\s+\S+\s+\[?(WARN|WARNING)\]?\s"
+    r"|\(node:\d+\)\s+(\[\w+\]\s+)?\w*Warning\b"    # avisos do processo Node
+    r"|^[^\n]{0,160}?\b\w*(Deprecation|User|Runtime|Future|Resource|Experimental|MaxListenersExceeded)Warning\b",
+    re.I,
+)
+# Mesmo marcado como aviso, isto é erro de verdade
+_REAL_ERROR = re.compile(r"traceback \(most recent call last\)|unhandled|uncaught|\bfatal\b|task timed out|"
+                         r"runtime\.exited|out of memory|outofmemory", re.I)
+
+
+def is_warning(message: str) -> bool:
+    return (bool(_WARNING.search(message[:300])) and not _SEVERE_ANYWAY.search(message)
+            and not _REAL_ERROR.search(message))
+
+
 def is_low_level(message: str) -> bool:
     return bool(_LOW_LEVEL.search(message[:300])) and not _SEVERE_ANYWAY.search(message)
 
 
 def classify(message: str) -> str:
+    if is_warning(message):
+        return "warning"
     m = message.lower()
     if "task timed out" in m or "status: timeout" in m or "timed out" in m or "etimedout" in m \
             or "timeouterror" in m or "readtimeout" in m:

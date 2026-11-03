@@ -22,6 +22,7 @@ import blacklist
 import db
 import fingerprint as fp
 import prompt as prompt_builder
+import collector as collector_mod
 from collector import Collector
 import reloader
 from config import APP_NAME, AUTO_RELOAD, AWS_PROFILE, AWS_REGION, DB_PATH, HOST, INTERVAL_CHOICES, PORT, WEB_DIR
@@ -54,8 +55,11 @@ def _range(qs) -> tuple[int, int, str]:
     return db.now_ms() - span, bucket, key
 
 
-def _filters(qs, alias="e") -> tuple[str, list]:
+def _filters(qs, alias="e", errors_only=True) -> tuple[str, list]:
+    """errors_only: warnings ficam fora das estatísticas de erro, a menos que a categoria Warning seja escolhida."""
     sql, args = "", []
+    if errors_only and not qs.get("category"):
+        sql += f" AND {alias}.category != 'warning'"
     if qs.get("service"):
         sql += f" AND {alias}.service = ?"
         args.append(qs["service"])
@@ -155,7 +159,7 @@ def api_breakdown(conn, qs):
 def api_issues(conn, qs):
     start, _, _ = _range(qs)
     status = qs.get("status", "open")
-    fsql, fargs = _filters(qs)
+    fsql, fargs = _filters(qs, errors_only=qs.get("errors_only") == "1")  # a lista mostra os warnings também
     sql = ("SELECT i.*, COUNT(e.id) AS range_count, MAX(e.ts) AS range_last FROM issues i "
            "JOIN events e ON e.fingerprint = i.fingerprint AND e.ts >= ? WHERE 1=1" + fsql)
     args = [start] + fargs
@@ -181,7 +185,7 @@ REPORT_MESSAGE_CHARS = 4_000
 def api_report(conn, qs):
     """Issues mais frequentes do período (com os filtros da tela) + última mensagem de cada, mascaradas."""
     limit = min(int(qs.get("limit", REPORT_MAX_ISSUES)), 50)
-    items = api_issues(conn, {**qs, "sort": "count"})["items"][:limit]
+    items = api_issues(conn, {**qs, "sort": "count", "errors_only": "1"})["items"][:limit]
     for it in items:
         ev = conn.execute("SELECT message, ts FROM events WHERE fingerprint = ? ORDER BY ts DESC LIMIT 1",
                           (it["fingerprint"],)).fetchone()
@@ -309,7 +313,7 @@ def api_issues_new(conn, qs):
     since = int(qs.get("since", "0"))
     return {"items": db.rows(conn.execute(
         "SELECT fingerprint, title, service, category, created_at, regressed_at FROM issues "
-        "WHERE status = 'open' AND (created_at > ? OR regressed_at > ?) ORDER BY created_at DESC LIMIT 20",
+        "WHERE status = 'open' AND category != 'warning' AND (created_at > ? OR regressed_at > ?) ORDER BY created_at DESC LIMIT 20",
         (since, since)))}
 
 
@@ -331,6 +335,65 @@ def api_issue(conn, fingerprint, qs):
         "FROM events WHERE fingerprint = ? ORDER BY ts DESC LIMIT 100", (fingerprint,)))
     return {"issue": issue, "events": events,
             "timeline": {"labels": labels, "data": [counts.get(b, 0) for b in labels]}}
+
+
+LOGS_EXPORT_MAX = 200_000
+
+
+def _logs_where(qs) -> tuple[str, list, int, int]:
+    """Filtro do "Baixar logs": período (padrão: últimos 7 dias) + opções da janela."""
+    end = int(qs["to"]) if qs.get("to") else db.now_ms()
+    start = int(qs["from"]) if qs.get("from") else end - 7 * 86_400_000
+    if start >= end:
+        raise ValueError("A data de início precisa ser antes da data de fim")
+    sql, args = " WHERE e.ts >= ? AND e.ts <= ?", [start, end]
+    if qs.get("warnings", "1") != "1":
+        sql += " AND e.category != 'warning'"
+    if qs.get("ignored", "0") != "1":
+        sql += " AND i.status != 'ignored'"
+    fsql, fargs = _filters(qs, errors_only=False)
+    return sql + fsql, args + fargs, start, end
+
+
+def api_logs_count(conn, qs) -> dict:
+    where, args, _, _ = _logs_where(qs)
+    row = conn.execute("SELECT COUNT(*), COUNT(DISTINCT e.fingerprint) FROM events e "
+                       "JOIN issues i ON i.fingerprint = e.fingerprint" + where, args).fetchone()
+    return {"events": row[0], "issues": row[1], "max": LOGS_EXPORT_MAX}
+
+
+def logs_text(conn, qs) -> tuple[str, str]:
+    """Todas as ocorrências guardadas no período, em ordem cronológica, com um resumo por issue no topo."""
+    where, args, start, end = _logs_where(qs)
+    fmt = lambda ms: datetime.fromtimestamp(ms / 1000).strftime("%d/%m/%Y %H:%M:%S")
+    summary = conn.execute(
+        "SELECT i.title, i.service, i.category, COUNT(*) AS n FROM events e JOIN issues i ON i.fingerprint = "
+        "e.fingerprint" + where + " GROUP BY e.fingerprint ORDER BY n DESC", args).fetchall()
+    total = sum(r["n"] for r in summary)
+    out = io.StringIO()
+    out.write(f"{APP_NAME} — logs de erro guardados localmente\n")
+    out.write(f"Período: {fmt(start)} até {fmt(end)}\n")
+    filters = [f"serviço = {qs['service']}" if qs.get("service") else "",
+               f"categoria = {fp.CATEGORIES.get(qs['category'], qs['category'])}" if qs.get("category") else "",
+               "sem warnings" if qs.get("warnings", "1") != "1" else "",
+               "inclui issues ignoradas" if qs.get("ignored") == "1" else ""]
+    out.write(f"Filtros: {', '.join(f for f in filters if f) or 'nenhum'}\n")
+    out.write(f"Ocorrências: {total} em {len(summary)} issues"
+              + (f" (mostrando as {LOGS_EXPORT_MAX} mais recentes)" if total > LOGS_EXPORT_MAX else "") + "\n")
+    out.write(f"Exportado em: {fmt(db.now_ms())}\n\nRESUMO POR ISSUE\n")
+    for r in summary:
+        out.write(f"  {r['n']:>7}  [{fp.CATEGORIES.get(r['category'], r['category'])}] {r['service']} — {r['title']}\n")
+    rows = conn.execute(
+        "SELECT * FROM (SELECT e.ts, e.service, e.category, e.log_group, e.log_stream, e.message, i.title "
+        "FROM events e JOIN issues i ON i.fingerprint = e.fingerprint" + where +
+        " ORDER BY e.ts DESC LIMIT ?) ORDER BY ts", args + [LOGS_EXPORT_MAX])
+    for e in rows:
+        out.write(f"\n{'=' * 100}\n{fmt(e['ts'])} · {fp.CATEGORIES.get(e['category'], e['category'])} · "
+                  f"{e['service']} · {e['log_group']} · {e['log_stream']}\nIssue: {e['title']}\n{'-' * 100}\n")
+        out.write(e["message"].rstrip() + "\n")
+    name = (f"logs-{datetime.fromtimestamp(start / 1000):%Y%m%d-%H%M}"
+            f"-a-{datetime.fromtimestamp(end / 1000):%Y%m%d-%H%M}.txt")
+    return out.getvalue(), name
 
 
 def issue_log_text(conn, fingerprint):
@@ -538,6 +601,12 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(200, api_alerts(conn))
                 if path == "/api/blacklist":
                     return self._send(200, {"items": blacklist.list_entries(conn)})
+                if path == "/api/logs/count":
+                    return self._send(200, api_logs_count(conn, qs))
+                if path == "/api/logs.txt":
+                    text, name = logs_text(conn, qs)
+                    return self._send(200, ("\ufeff" + text).encode("utf-8"), "text/plain; charset=utf-8",
+                                      {"Content-Disposition": f'attachment; filename="{name}"'})
                 if path == "/api/runs":
                     return self._send(200, {"items": db.rows(conn.execute(
                         "SELECT * FROM runs ORDER BY id DESC LIMIT 50"))})
@@ -554,7 +623,7 @@ class Handler(BaseHTTPRequestHandler):
                         return self._send(404, {"error": "issue não encontrada"})
                     name = f"issue-{m.group(1)}-{datetime.now():%Y%m%d-%H%M}.txt"
                     # BOM: o Bloco de Notas do Windows abre os acentos certos
-                    return self._send(200, ("﻿" + text).encode("utf-8"), "text/plain; charset=utf-8",
+                    return self._send(200, ("\ufeff" + text).encode("utf-8"), "text/plain; charset=utf-8",
                                       {"Content-Disposition": f'attachment; filename="{name}"'})
                 m = re.fullmatch(r"/api/issue/([0-9a-f]{16})/prompt", path)
                 if m:
@@ -569,6 +638,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, {"error": "rota não encontrada"})
         except KeyError as exc:
             self._send(404, {"error": str(exc)})
+        except ValueError as exc:
+            self._send(400, {"error": str(exc)})
         except Exception as exc:
             log.exception("erro na API %s", path)
             self._send(500, {"error": str(exc)})
@@ -706,6 +777,8 @@ def main():
         if args.check:
             raise SystemExit(0 if ok else 1)
         db.init()
+        with db.connect() as conn:
+            collector_mod.reclassify_warnings(conn)
         collector = Collector()
         collector.start()
     alert_loop = alerts.AlertLoop(collector)

@@ -462,3 +462,11 @@ h3.sub { margin-top: 4px; }
 .bl-note { font-size: 13px; margin-top: 4px; }
 .bl-sample { margin-top: 6px; max-height: 120px; font-size: 11.5px; }
 #blacklistItems li { grid-template-columns: 1fr auto; align-items: start; }
+
+/* categoria Warning: amarelada, para destacar que não é erro */
+.pill.cat-warning { background: color-mix(in srgb, #e8a33d 16%, var(--surface)); border-color: color-mix(in srgb, #e8a33d 45%, var(--border)); }
+tr:has(.cat-warning) .issue-title { color: var(--ink-2); }
+
+/* baixar logs */
+.export-quick { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.export-count { font-size: 14px; font-weight: 600; padding: 8px 10px; border-radius: 8px; background: var(--surface-2); }

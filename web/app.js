@@ -221,7 +221,7 @@ function renderBreakdown(data) {
   state.knownServices = [...new Set([...(state.knownServices || []), ...data.services.map((s) => s.name)])];
   $("servicesBox").style.height = `${Math.max(140, data.services.length * 26 + 40)}px`;
   hbar("services", "servicesChart", data.services, (r) => r.name, (r) => setFilter("service", r.name), state.service);
-  hbar("categories", "categoriesChart", data.categories, (r) => r.label, (r) => setFilter("category", r.name), state.category);
+  hbar("categories", "categoriesChart", data.categories, (r) => `${CATEGORY_ICONS[r.name] || ""} ${r.label}`.trim(), (r) => setFilter("category", r.name), state.category);
 
   const sel = $("serviceFilter");
   const current = state.service;
@@ -231,7 +231,7 @@ function renderBreakdown(data) {
     [...names].sort().map((n) => `<option ${n === current ? "selected" : ""}>${esc(n)}</option>`).join("");
   const csel = $("categoryFilter");
   csel.innerHTML = `<option value="">Todas as categorias</option>` +
-    Object.entries(CATEGORY_LABELS).map(([k, v]) => `<option value="${k}" ${k === state.category ? "selected" : ""}>${v}</option>`).join("");
+    Object.entries(CATEGORY_LABELS).map(([k, v]) => `<option value="${k}" ${k === state.category ? "selected" : ""}>${CATEGORY_ICONS[k]} ${v}</option>`).join("");
 }
 
 // ------------------------------------------------------------------ blocos
@@ -282,7 +282,7 @@ function renderIssues(data) {
       <td><div class="issue-title">${esc(it.title)}</div>
         <div class="issue-sub">${issueBadge(it)}${it.first_seen >= rangeStart ? '<span class="pill">nova</span>' : ""}<span>${esc(it.log_group)}</span></div></td>
       <td class="svc">${esc(it.service)}</td>
-      <td><span class="pill">${esc(it.category_label)}</span></td>
+      <td>${categoryPill(it.category, it.category_label)}</td>
       <td class="num"><div class="bar-cell"><span class="bar-mini" style="width:${Math.round((it.range_count / max) * 60)}px"></span>${nf.format(it.range_count)}</div></td>
       <td class="num">${nf.format(it.count)}</td>
       <td class="when" title="${fmtFull(it.last_seen)}">${relTime(it.last_seen)}</td>
@@ -338,7 +338,11 @@ function setFilter(key, value) {
   state[key] = state[key] === value ? "" : value;
   loadAll();
 }
-const CATEGORY_LABELS = { timeout: "Timeout", http_5xx: "HTTP 5xx", fatal: "Fatal / Crash", exception: "Exceção", error: "Erro" };
+const CATEGORY_LABELS = { timeout: "Timeout", http_5xx: "HTTP 5xx", fatal: "Fatal / Crash", exception: "Exceção", error: "Erro", warning: "Warning" };
+// emoji por tipo de erro (tabela, detalhe e filtros)
+const CATEGORY_ICONS = { timeout: "⏱️", http_5xx: "🌐", fatal: "💥", exception: "🐞", error: "❌", warning: "⚠️" };
+const categoryPill = (key, label) =>
+  `<span class="pill cat-${esc(key)}" title="${key === "warning" ? "Aviso: aparece aqui, mas não conta nas estatísticas de erro" : esc(label)}">${CATEGORY_ICONS[key] || "•"} ${esc(label)}</span>`;
 function renderActiveFilters() {
   const chips = [];
   if (state.service) chips.push(`<button class="chip filter" data-clear="service" title="Remover filtro">Serviço: ${esc(state.service)}<span class="x">✕</span></button>`);
@@ -515,7 +519,7 @@ async function loadIssue(fp, openDrawer = true) {
     state.issue = fp;
     $("btnDownload").href = `/api/issue/${fp}/log.txt`;
     $("dTitle").textContent = it.title;
-    $("dMeta").innerHTML = `${issueBadge(it)}<span class="pill">${esc(it.category_label)}</span><span class="pill">${esc(it.kind)}</span><span class="pill">${esc(it.service)}</span>`;
+    $("dMeta").innerHTML = `${issueBadge(it)}${categoryPill(it.category, it.category_label)}<span class="pill">${esc(it.kind)}</span><span class="pill">${esc(it.service)}</span>`;
     $("dFacts").innerHTML = [
       ["Ocorrências (total)", nf.format(it.count)],
       ["Primeira vez", fmtFull(it.first_seen)],

@@ -55,7 +55,7 @@ ISSUES = [
      "2026-01-01 00:00:00 UTC::@:[4123]:ERROR:  deadlock detected", 2, "open", False),
     ("/aws/lambda/checkout-api",
      "(node:8) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 error listeners added",
-     10, "ignored", False),
+     10, "open", False),
     ("/ecs/storefront-web",
      "Error: Failed to find Server Action \"x\". This request might be from an older or newer deployment.",
      3, "open", False),

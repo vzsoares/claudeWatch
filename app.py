@@ -273,8 +273,7 @@ def api_alerts_post(conn, path, body):
         conn.commit()
         result = {"ok": True}
     elif m := re.fullmatch(r"/api/alerts/rules/(\d+)/toggle", path):
-        conn.execute("UPDATE alert_rules SET enabled = ? WHERE id = ?", (1 if body.get("enabled") else 0, int(m.group(1))))
-        conn.commit()
+        alerts.set_enabled(conn, int(m.group(1)), bool(body.get("enabled")))
         result = {"ok": True}
     elif path == "/api/alerts/test":
         alerts.test_alert(conn, int(body["rule_id"]) if body.get("rule_id") else None)

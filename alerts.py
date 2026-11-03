@@ -124,6 +124,18 @@ def save_rule(conn, body: dict) -> dict:
     return {"id": rule_id}
 
 
+def set_enabled(conn, rule_id: int, enabled: bool) -> None:
+    """Liga/desliga pela chave da lista. Ao ligar, confere se a regra está completa
+    (ex.: o preset de silêncio vem sem log group e só pode ser ligado depois de configurado)."""
+    rule = conn.execute("SELECT kind, params FROM alert_rules WHERE id = ?", (rule_id,)).fetchone()
+    if rule is None:
+        raise ValueError("Alarme não encontrado")
+    if enabled:
+        _clean_params(rule["kind"], json.loads(rule["params"] or "{}"))
+    conn.execute("UPDATE alert_rules SET enabled = ? WHERE id = ?", (1 if enabled else 0, rule_id))
+    conn.commit()
+
+
 # ------------------------------------------------------------------ disparos
 def _fire(conn, rule: dict, title: str, detail: str, key: str, fingerprint: str | None = None,
           service: str | None = None) -> bool:
@@ -248,7 +260,7 @@ def _evaluate_rule(conn, collector, rule, p, since, now) -> int:
                            f"Nenhuma coleta bem-sucedida há {round((now - last_ok) / 60_000)} min. "
                            "Verifique a internet e as credenciais da AWS.", f"stalled:{last_ok}")
 
-    elif kind == "silence" and collector is not None:
+    elif kind == "silence" and collector is not None and p.get("group"):
         streams = collector.logs.describe_log_streams(logGroupName=p["group"], orderBy="LastEventTime",
                                                       descending=True, limit=1).get("logStreams", [])
         last_event = streams[0].get("lastEventTimestamp") if streams else None

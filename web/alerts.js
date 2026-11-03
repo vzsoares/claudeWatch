@@ -282,7 +282,15 @@ function bindAlarms() {
     const id = li.dataset.id;
     const rule = alarm.data.rules.find((r) => String(r.id) === id);
     if (act === "toggle") {
-      await api(`/api/alerts/rules/${id}/toggle`, { method: "POST", body: { enabled: e.target.checked } });
+      try {
+        await api(`/api/alerts/rules/${id}/toggle`, { method: "POST", body: { enabled: e.target.checked } });
+      } catch (err) {
+        // regra incompleta (ex.: silêncio sem log group): desfaz a chave e abre o formulário para completar
+        e.target.checked = false;
+        toast(`${esc(err.message)} — complete o alarme e salve para ligá-lo.`, "warning");
+        editRule({ ...rule, enabled: 1 });
+        return;
+      }
       toast(e.target.checked ? `“${esc(rule.name)}” ligado.` : `“${esc(rule.name)}” desligado.`, "good");
       loadAlarms();
     } else if (act === "test") {

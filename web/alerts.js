@@ -1,27 +1,27 @@
 "use strict";
-// Alarmes na tela: aviso grande no meio da tela (borda piscando) + opcional notificação do sistema e som.
-// Usa helpers globais de app.js (api, esc, $, toast, fmtFull, relTime, loadIssue, setFilter, state).
+// Alarmes na tela: cartões no canto inferior esquerdo (não bloqueiam o painel) + opcional notificação do sistema e som.
+// Usa helpers globais de app.js (api, esc, $, toast, fmtFull, relTime, loadIssue, loadAll, state, store, syncUrl).
 
 const alarm = {
   data: null,          // resposta de /api/alerts (regras, histórico…)
   active: [],          // disparos não reconhecidos
   notify: true, sound: false,
-  snoozeUntil: 0,
   seen: new Set(),     // ids já notificados (som/notificação só uma vez)
   firstPoll: true,
   titleTimer: null, baseTitle: "",
+  minimized: store.get("alertsMinimized", false),
+  tab: "active",       // "active" | "history"
+  cardOpen: new Map(), // id -> aberto/compacto escolhido pelo usuário
+  activeKey: "", historyVersion: 0, renderKey: "",
 };
+const OPEN_BY_DEFAULT = 3;  // os mais novos aparecem abertos; os demais, compactos (um clique abre)
 
-// ------------------------------------------------------------------ aviso no meio da tela
+// ------------------------------------------------------------------ cartões no canto
 function onAlerts(summary) {
   if (!summary) return;
   alarm.active = summary.active || [];
   alarm.notify = summary.notify;
   alarm.sound = summary.sound;
-  const n = alarm.active.length;
-  $("alarmBadge").textContent = n;
-  $("alarmBadge").classList.toggle("hidden", !n);
-  $("openAlarms").classList.toggle("has-alarm", n > 0);
 
   const fresh = alarm.active.filter((a) => !alarm.seen.has(a.id));
   fresh.forEach((a) => alarm.seen.add(a.id));
@@ -29,31 +29,120 @@ function onAlerts(summary) {
   if (fresh.length && !alarm.firstPoll) {
     if (alarm.sound) playAlarmSound(fresh[0].severity);
     if (alarm.notify) systemNotify(fresh[0], fresh.length);
-    alarm.snoozeUntil = 0;  // alerta novo fura a soneca
+    setAlertsMinimized(false);  // alerta novo reabre a bandeja
   }
   alarm.firstPoll = false;
-  renderOverlay();
+  const key = alarm.active.map((a) => a.id).join();
+  if (key !== alarm.activeKey) {
+    alarm.activeKey = key;
+    if (alertHistoryVisible()) loadAlertHistory();
+  }
+  renderAlertDock();
 }
 
-function renderOverlay() {
-  const ov = $("alertOverlay");
-  const a = alarm.active[0];
-  const show = !!a && Date.now() >= alarm.snoozeUntil;
-  ov.classList.toggle("hidden", !show);
-  flashTitle(show);
-  if (!show) return;
-  const warning = a.severity === "warning";
-  ov.classList.toggle("warning", warning);
-  $("alertRule").textContent = `${warning ? "Aviso" : "Alarme crítico"} · ${a.rule_name}`;
-  $("alertTitle").textContent = a.title;
-  $("alertDetail").textContent = a.detail || "";
-  const others = alarm.active.length - 1;
-  $("alertMeta").textContent = `${fmtFull(a.ts)} (${relTime(a.ts)})` + (others > 0 ? ` · +${others} outro(s) alarme(s) não reconhecido(s)` : "");
-  $("alertView").classList.toggle("hidden", !a.fingerprint && !a.service);
-  $("alertView").textContent = a.fingerprint ? "🔍 Ver issue" : "🔍 Ver serviço";
-  $("alertAckAll").classList.toggle("hidden", others <= 0);
-  $("alertAckAll").textContent = `Reconhecer todos (${alarm.active.length})`;
-  if (!ov.contains(document.activeElement)) $("alertAck").focus({ preventScroll: true });
+const alertHistoryVisible = () => alarm.tab === "history" && !alarm.minimized;
+
+function setAlertsMinimized(on) {
+  alarm.minimized = on;
+  store.set("alertsMinimized", on);
+}
+
+function showAlertHistory(on) {
+  alarm.tab = on ? "history" : "active";
+  if (on) {
+    setAlertsMinimized(false);
+    loadAlertHistory();
+  }
+  renderAlertDock();
+}
+
+function renderAlertDock() {
+  const n = alarm.active.length;
+  $("alarmBadge").textContent = n;
+  $("alarmBadge").classList.toggle("hidden", !n);
+  $("openAlarms").classList.toggle("has-alarm", n > 0);
+  const history = alarm.tab === "history";
+  const open = !alarm.minimized && (n > 0 || history);
+  const pill = alarm.minimized && n > 0;
+  $("alertDock").classList.toggle("hidden", !open && !pill);
+  $("alertTray").classList.toggle("hidden", !open);
+  $("alertPill").classList.toggle("hidden", !pill);
+  $("alertPill").textContent = `🚨 ${n} alarme${n > 1 ? "s" : ""} não reconhecido${n > 1 ? "s" : ""}`;
+  $("openAlertHistory").classList.toggle("active", alertHistoryVisible());
+  flashTitle(n > 0 && !alarm.minimized);
+  if (!open) return;
+
+  // redesenha só quando algo muda (ou a cada minuto, pelo "há N min"), para não perder foco/hover dos botões
+  const key = [alarm.tab, alarm.activeKey, [...alarm.cardOpen], alarm.historyVersion, Math.floor(Date.now() / 60000)].join("|");
+  if (key === alarm.renderKey) return;
+  alarm.renderKey = key;
+  $("alertTabActive").textContent = `Ativos (${n})`;
+  $("alertTabs").querySelectorAll("button").forEach((b) => b.classList.toggle("active", b.dataset.tab === alarm.tab));
+  $("alertAckAll").classList.toggle("hidden", history || n < 2);
+  const min = $("alertMinimize");
+  min.textContent = n ? "–" : "✕";
+  min.title = n ? "Minimizar" : "Fechar";
+  min.setAttribute("aria-label", min.title);
+  $("alertList").classList.toggle("hidden", history);
+  $("alertHistoryList").classList.toggle("hidden", !history);
+  if (history) renderAlertHistory(); else renderAlertCards();
+}
+
+function renderAlertCards() {
+  $("alertList").innerHTML = alarm.active.map((a, i) => {
+    const warn = a.severity === "warning" ? "warning" : "";
+    if (!(alarm.cardOpen.get(a.id) ?? i < OPEN_BY_DEFAULT)) {
+      return `<li class="alert-card compact ${warn}" data-id="${a.id}">
+        <button class="alert-compact" data-act="expand" title="Mostrar detalhes">
+          <span class="sev-dot" aria-hidden="true"></span><span class="ac-title">${esc(a.title)}</span>
+          <span class="when">${esc(relTime(a.ts))}</span><span aria-hidden="true">▸</span></button></li>`;
+    }
+    const view = a.fingerprint ? "🔍 Ver issue" : a.service ? "🔍 Ver serviço" : "";
+    return `<li class="alert-card ${warn}" data-id="${a.id}">
+      <div class="alert-card-head"><span class="sev">${warn ? "Aviso" : "Crítico"}</span>
+        <span class="alert-card-rule">${esc(a.rule_name)}</span>
+        <button class="btn icon" data-act="collapse" title="Minimizar este aviso" aria-label="Minimizar este aviso">–</button></div>
+      <div class="alert-card-title">${esc(a.title)}</div>
+      ${a.detail ? `<div class="alert-card-detail" title="${esc(a.detail)}">${esc(a.detail)}</div>` : ""}
+      <div class="alert-card-meta">${a.service ? `${esc(a.service)} · ` : ""}<span title="${fmtFull(a.ts)}">${fmtTime(a.ts)} · ${esc(relTime(a.ts))}</span></div>
+      <div class="alert-card-actions">
+        <button class="btn" data-act="explain" title="O que significa?">ℹ</button>
+        ${view ? `<button class="btn" data-act="view">${view}</button>` : ""}
+        <button class="btn primary" data-act="ack">✓ Reconhecer</button>
+      </div></li>`;
+  }).join("");
+}
+
+async function loadAlertHistory() {
+  try {
+    alarm.data = await api("/api/alerts");
+  } catch (e) {
+    toast(`Não consegui carregar o histórico: ${esc(e.message)}`, "critical");
+    return;
+  }
+  alarm.historyVersion++;
+  renderAlertDock();
+}
+
+function renderAlertHistory() {
+  const list = $("alertHistoryList");
+  if (!alarm.data) { list.innerHTML = `<li class="muted">Carregando…</li>`; return; }
+  list.innerHTML = alarm.data.history.map((h) => `
+    <li class="alert-hist ${h.severity === "warning" ? "warning" : ""}" data-id="${h.id}" tabindex="0"
+      title="${h.fingerprint ? "Abrir a issue" : h.service ? "Ver erros do serviço" : "Entender o alarme"}">
+      <span class="sev-dot" aria-hidden="true"></span>
+      <div class="ah-main"><div class="ah-title">${esc(h.title)}</div>
+        <div class="ah-meta">${esc(h.rule_name)} · <span title="${fmtFull(h.ts)}">${fmtTime(h.ts)} (${esc(relTime(h.ts))})</span></div></div>
+      ${h.acknowledged_at ? statusBadge("good", `reconhecido ${fmtTime(h.acknowledged_at, false)}`, "✓") : statusBadge("critical", "pendente", "!")}
+    </li>`).join("") || `<li class="muted">Nenhum disparo ainda.</li>`;
+}
+
+function openFromHistory(id) {
+  const h = alarm.data?.history.find((x) => String(x.id) === String(id));
+  if (!h) return;
+  if (h.fingerprint) loadIssue(h.fingerprint);
+  else if (h.service) { state.service = h.service; loadAll(); }
+  else explainMonitorAlert({ ...h, rule_kind: alarm.data.rules.find((r) => r.id === h.rule_id)?.kind });
 }
 
 function flashTitle(on) {
@@ -64,25 +153,25 @@ function flashTitle(on) {
   } else if (!on && alarm.titleTimer) {
     clearInterval(alarm.titleTimer);
     alarm.titleTimer = null;
+    document.title = alarm.baseTitle;
   }
   if (!document.title.startsWith("🚨")) alarm.baseTitle = document.title;
 }
 
-async function ackAlert(all = false) {
-  const a = alarm.active[0];
+// a = null reconhece todos
+async function ackAlert(a) {
   try {
-    await api(all ? "/api/alerts/ack-all" : `/api/alerts/${a.id}/ack`, { method: "POST" });
+    await api(a ? `/api/alerts/${a.id}/ack` : "/api/alerts/ack-all", { method: "POST" });
   } catch (e) {
     toast(`Não consegui reconhecer: ${esc(e.message)}`, "critical");
+    return;
   }
-  alarm.active = all ? [] : alarm.active.slice(1);
-  renderOverlay();
+  onAlerts({ active: a ? alarm.active.filter((x) => x.id !== a.id) : [], notify: alarm.notify, sound: alarm.sound });
   pollStatus();
 }
 
-async function viewAlert() {
-  const a = alarm.active[0];
-  await ackAlert(false);
+async function viewAlert(a) {
+  await ackAlert(a);
   if (a.fingerprint) loadIssue(a.fingerprint);
   else if (a.service) { state.service = a.service; loadAll(); }
 }
@@ -180,10 +269,11 @@ async function loadAlarms() {
       </div>
     </li>`).join("") || `<li class="muted">Nenhuma regra. Crie uma em “Novo alarme”.</li>`;
   $("alarmHistory").innerHTML = d.history.map((h) => `
-    <tr><td class="when">${fmtFull(h.ts)}</td><td>${esc(h.rule_name)}</td>
+    <tr data-id="${h.id}"><td class="when">${fmtFull(h.ts)}</td><td>${esc(h.rule_name)}</td>
       <td>${esc(h.title)}<div class="muted small">${esc((h.detail || "").slice(0, 160))}</div></td>
       <td class="when">${h.acknowledged_at ? fmtFull(h.acknowledged_at) : "<strong>pendente</strong>"}</td></tr>`).join("")
     || `<tr><td colspan="4" class="muted">Nenhum disparo ainda.</td></tr>`;
+  if (alertHistoryVisible()) { alarm.historyVersion++; renderAlertDock(); }
   const kinds = $("alarmKind");
   if (!kinds.options.length) {
     kinds.innerHTML = Object.entries(d.kinds).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("");
@@ -246,13 +336,40 @@ async function saveRule(e) {
 
 function bindAlarms() {
   $("openAlarms").addEventListener("click", openAlarms);
-  $("alertAck").addEventListener("click", () => ackAlert(false));
-  $("alertAckAll").addEventListener("click", () => ackAlert(true));
-  $("alertView").addEventListener("click", viewAlert);
-  $("alertSnooze").addEventListener("click", () => {
-    alarm.snoozeUntil = Date.now() + 10 * 60_000;
-    renderOverlay();
-    toast("Aviso escondido por 10 minutos. O alarme continua pendente no botão 🔔.");
+  $("openAlertHistory").addEventListener("click", () => { showAlertHistory(!alertHistoryVisible()); syncUrl(); });
+  $("alertTabs").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-tab]");
+    if (b) { showAlertHistory(b.dataset.tab === "history"); syncUrl(); }
+  });
+  $("alertMinimize").addEventListener("click", () => {
+    if (alarm.active.length) setAlertsMinimized(true); else alarm.tab = "active";
+    renderAlertDock();
+    syncUrl();
+  });
+  $("alertPill").addEventListener("click", () => { setAlertsMinimized(false); renderAlertDock(); syncUrl(); });
+  $("alertAckAll").addEventListener("click", () => ackAlert(null));
+  $("alertList").addEventListener("click", (e) => {
+    const li = e.target.closest("li[data-id]");
+    const act = e.target.closest("[data-act]")?.dataset.act;
+    const a = li && alarm.active.find((x) => String(x.id) === li.dataset.id);
+    if (!a || !act) return;
+    if (act === "expand" || act === "collapse") { alarm.cardOpen.set(a.id, act === "expand"); renderAlertDock(); }
+    else if (act === "ack") ackAlert(a);
+    else if (act === "view") viewAlert(a);
+    else if (act === "explain") explainMonitorAlert(a);
+  });
+  $("alertHistoryList").addEventListener("click", (e) => {
+    const li = e.target.closest("li[data-id]");
+    if (li) openFromHistory(li.dataset.id);
+  });
+  $("alertHistoryList").addEventListener("keydown", (e) => {
+    if ((e.key === "Enter" || e.key === " ") && e.target.matches("li[data-id]")) { e.preventDefault(); openFromHistory(e.target.dataset.id); }
+  });
+  $("alarmHistory").addEventListener("click", (e) => {
+    const tr = e.target.closest("tr[data-id]");
+    if (!tr) return;
+    $("alarmsModal").classList.remove("show");
+    openFromHistory(tr.dataset.id);
   });
   $("alarmNew").addEventListener("click", () => editRule(null));
   $("alarmCancel").addEventListener("click", () => $("alarmForm").classList.add("hidden"));
@@ -304,13 +421,6 @@ function bindAlarms() {
       loadAlarms();
     }
   });
-  // Esc reconhece o aviso aberto (e não fecha modais por baixo dele)
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && !$("alertOverlay").classList.contains("hidden")) {
-      e.stopImmediatePropagation();
-      ackAlert(false);
-    }
-  }, true);
 }
 
 bindAlarms();

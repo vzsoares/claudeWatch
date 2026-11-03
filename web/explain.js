@@ -187,7 +187,7 @@ function explainCloudWatchAlarm(a) {
   const level = kb.level(a);
   const svc = guessService(a.name);
   const actions = [];
-  if (svc) actions.push({ label: `🔍 Ver erros de ${svc}`, primary: true, onClick: () => { closeExplain(); $("alertOverlay").classList.add("hidden"); state.service = svc; loadAll(); } });
+  if (svc) actions.push({ label: `🔍 Ver erros de ${svc}`, primary: true, onClick: () => { closeExplain(); state.service = svc; loadAll(); } });
   actions.push({ label: "Abrir no console AWS ↗", href: alarmConsoleUrl(a.name) });
   actions.push({ label: "✨ Gerar prompt para o Claude", onClick: () => alarmPrompt(a, kb) });
   const stateTxt = { ALARM: "em ALARM", OK: "OK", INSUFFICIENT_DATA: "sem dados" }[a.state] || a.state;
@@ -207,8 +207,10 @@ function explainMonitorAlert(alert) {
   }
   const r = RULE_EXPLAIN[alert.rule_kind] || { level: "warning", title: "Alarme do monitor", what: "Uma regra de alarme configurada por você disparou.", todo: ["Veja os detalhes do aviso e os erros no painel."] };
   const actions = [];
-  if (alert.fingerprint) actions.push({ label: "🔍 Abrir a issue", primary: true, onClick: () => { closeExplain(); viewAlert(); } });
-  else if (alert.service) actions.push({ label: `🔍 Ver erros de ${alert.service}`, primary: true, onClick: () => { closeExplain(); viewAlert(); } });
+  // do histórico (já reconhecido) só abre; de um aviso pendente, reconhece e abre
+  const open = () => { closeExplain(); alert.acknowledged_at ? openFromHistory(alert.id) : viewAlert(alert); };
+  if (alert.fingerprint) actions.push({ label: "🔍 Abrir a issue", primary: true, onClick: open });
+  else if (alert.service) actions.push({ label: `🔍 Ver erros de ${alert.service}`, primary: true, onClick: open });
   actions.push({ label: "🔔 Ajustar este alarme", onClick: () => { closeExplain(); openAlarms(); } });
   renderExplain({
     title: r.title, badge: `<span class="pill">${esc(alert.rule_name)}</span>`, level: r.level, what: r.what,
@@ -244,7 +246,6 @@ function bindExplain() {
   $("alarmsList").addEventListener("keydown", (e) => {
     if ((e.key === "Enter" || e.key === " ") && e.target.matches("li[data-name]")) { e.preventDefault(); e.target.click(); }
   });
-  $("alertExplain").addEventListener("click", () => alarm.active[0] && explainMonitorAlert(alarm.active[0]));
 }
 
 bindExplain();

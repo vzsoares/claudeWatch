@@ -29,6 +29,7 @@
     <button class="btn primary" id="openSearch" title="Procurar qualquer texto em todos os logs (atalho: /)">🔎 Buscar nos logs</button>
     <button class="btn" id="openExport" title="Baixar em .txt todos os logs de erro guardados num período">⬇ Baixar logs</button>
     <button class="btn alarms-btn" id="openAlarms" title="Alarmes na tela">🔔 Alarmes<span class="badge hidden" id="alarmBadge">0</span></button>
+    <button class="btn icon" id="openAlertHistory" title="Histórico de alarmes" aria-label="Histórico de alarmes">🕘</button>
     <button class="btn icon" id="openBlacklist" title="Lista de bloqueio (falsos alarmes)" aria-label="Lista de bloqueio">🚫</button>
     <button class="btn" id="collectNow">↻ Coletar agora</button>
     <button class="btn icon" id="themeToggle" title="Tema claro/escuro" aria-label="Alternar tema">◐</button>
@@ -287,21 +288,22 @@
   </div>
 </div>
 
-<!-- Aviso de alarme: aparece no meio da tela, com borda piscando, até ser reconhecido -->
-<div class="alert-overlay hidden" id="alertOverlay" role="alertdialog" aria-modal="true" aria-labelledby="alertTitle" aria-describedby="alertDetail">
-  <div class="alert-box" id="alertBox">
-    <div class="alert-head"><span class="alert-icon" aria-hidden="true">🚨</span><span class="alert-rule" id="alertRule"></span></div>
-    <h2 id="alertTitle"></h2>
-    <p id="alertDetail"></p>
-    <div class="alert-meta" id="alertMeta"></div>
-    <div class="alert-actions">
-      <button class="btn" id="alertExplain">ℹ O que significa?</button>
-      <button class="btn" id="alertView">🔍 Ver issue</button>
-      <button class="btn" id="alertSnooze" title="Esconde o aviso por 10 minutos sem reconhecer">⏰ Lembrar em 10 min</button>
-      <button class="btn" id="alertAckAll">Reconhecer todos</button>
-      <button class="btn primary" id="alertAck">✓ Reconhecer</button>
+<!-- Avisos de alarme: cartões no canto, sem bloquear o painel, até serem reconhecidos -->
+<div class="alert-dock hidden" id="alertDock">
+  <section class="alert-tray hidden" id="alertTray" role="region" aria-label="Alarmes na tela">
+    <div class="alert-tray-head">
+      <div class="segmented small" id="alertTabs">
+        <button data-tab="active" id="alertTabActive">Ativos</button>
+        <button data-tab="history">🕘 Histórico</button>
+      </div>
+      <span class="spacer"></span>
+      <button class="btn" id="alertAckAll">✓ Reconhecer todos</button>
+      <button class="btn icon" id="alertMinimize" title="Minimizar" aria-label="Minimizar">–</button>
     </div>
-  </div>
+    <ul class="alert-list" id="alertList" aria-live="assertive"></ul>
+    <ul class="alert-list alert-history hidden" id="alertHistoryList"></ul>
+  </section>
+  <button class="alert-pill hidden" id="alertPill" title="Mostrar os alarmes"></button>
 </div>
 
 <!-- Configuração dos alarmes -->
@@ -311,8 +313,8 @@
       <h2 id="alarmsTitle">🔔 Alarmes na tela</h2>
       <button class="btn icon" data-close aria-label="Fechar">✕</button>
     </div>
-    <p class="muted small">Quando uma regra ligada dispara, aparece um aviso no meio da tela, com borda piscando, até você
-      reconhecer. Funciona enquanto o monitor estiver aberto. <strong>Nada é enviado para fora da sua máquina.</strong></p>
+    <p class="muted small">Quando uma regra ligada dispara, aparece um aviso no canto da tela, sem bloquear o painel, até você
+      reconhecer (o 🕘 mostra o histórico). Funciona enquanto o monitor estiver aberto. <strong>Nada é enviado para fora da sua máquina.</strong></p>
 
     <div class="alarm-prefs">
       <label class="check"><input type="checkbox" id="alarmNotify"> Também mostrar notificação do sistema (Windows/Mac)</label>

@@ -47,7 +47,7 @@ second screen. **Nothing is installed in AWS**, there's no server to host, and i
 | ✨ **Generate Prompt** | Builds a ready-to-paste diagnosis prompt: full error, the **entire Lambda invocation** (or surrounding container lines), stats and related errors. Secrets masked by default |
 | 🔎 **Search** | Instant, free search in the full text of collected errors — or, with one checkbox, in **every** log line on AWS to find where an order id, e-mail or error code came from |
 | 🖼 **PNG report** | One click exports KPIs, charts, alarms and top errors with messages — great for chat or tickets |
-| 🚨 **On-screen alarms** | Rules you choose (spike, anomaly, new issue, regression, text match, CloudWatch alarm, silence, collection stalled) raise a big, blinking red alert in the middle of the screen until acknowledged — plus optional desktop notification and sound. 100% local |
+| 🚨 **On-screen alarms** | Rules you choose (spike, anomaly, new issue, regression, text match, CloudWatch alarm, silence, collection stalled) raise alert cards in the corner of the screen (they never block the dashboard) until acknowledged — plus optional desktop notification and sound. 100% local |
 | ✅ **Workflow** | Resolve (reopens as *Regression* if it comes back) or Ignore (known noise) |
 | ⚠️ **Warnings ≠ errors** | Warnings (WARN level, Node `(node:N) …Warning`, `DeprecationWarning`…) get their own *Warning* category: listed with the issues, but kept out of error totals, charts, the report and alarms |
 | ⬇ **Download logs** | Every stored occurrence in a date range (default: last 7 days) as a `.txt`, plus the full log of a single issue from its detail panel |
@@ -227,8 +227,10 @@ case-sensitive and regex.
 
 ## 🚨 On-screen alarms
 
-Leave the dashboard on a second screen: when a rule fires, a **large alert with a blinking red border**
-takes the middle of the screen until you acknowledge it (the tab title blinks too). Optional desktop
+Leave the dashboard on a second screen: when a rule fires, an **alert card** appears in the bottom-left
+corner until you acknowledge it (the tab title blinks too). Cards never block the dashboard: each one
+can be viewed, acknowledged or minimized, and the whole tray minimizes to a badge with the count.
+**🕘** opens the alert history; clicking an entry opens its issue. Optional desktop
 notification and sound. **Nothing leaves your machine** — alarms work while the monitor is open.
 
 Open **🔔 Alarms** at the top to turn rules on/off, edit thresholds, **test** how the alert looks and

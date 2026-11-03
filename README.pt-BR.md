@@ -47,7 +47,7 @@ segunda tela. **Nada é instalado na AWS**, não há servidor para hospedar e s�
 | ✨ **Gerar Prompt** | Monta um prompt de diagnóstico pronto para colar: erro completo, a **invocação inteira da Lambda** (ou as linhas ao redor no container), estatísticas e erros relacionados. Dados sensíveis mascarados |
 | 🔎 **Busca** | Instantânea e sem custo no texto completo dos erros coletados — ou, marcando uma caixa, em **todas** as linhas de log na AWS para achar de onde veio um id, pedido, e-mail ou código de erro |
 | 🖼 **Relatório PNG** | Um clique exporta KPIs, gráficos, alarmes e os principais erros com mensagens — ótimo para o chat da equipe ou um ticket |
-| 🚨 **Alarmes na tela** | Regras que você escolhe (pico, anomalia, issue nova, regressão, texto específico, alarme do CloudWatch, silêncio, coleta parada) mostram um aviso grande, com borda vermelha piscando, no meio da tela até você reconhecer — mais notificação do sistema e som opcionais. 100% local |
+| 🚨 **Alarmes na tela** | Regras que você escolhe (pico, anomalia, issue nova, regressão, texto específico, alarme do CloudWatch, silêncio, coleta parada) mostram avisos no canto da tela (sem bloquear o painel) até você reconhecer — mais notificação do sistema e som opcionais. 100% local |
 | ✅ **Fluxo de trabalho** | Resolver (reabre como *Regressão* se voltar) ou Ignorar (ruído conhecido) |
 | ⚠️ **Warning não é erro** | Avisos (nível WARN, `(node:N) …Warning` do Node, `DeprecationWarning`…) ganham a categoria *Warning*: aparecem na lista de issues, mas ficam fora dos totais, gráficos, relatório e alarmes de erro |
 | ⬇ **Baixar logs** | Todas as ocorrências guardadas num período (padrão: últimos 7 dias) em `.txt`, e o log completo de uma issue pelo painel de detalhe |
@@ -246,8 +246,10 @@ SQLite em uso.
 
 ## 🚨 Alarmes na tela
 
-Deixe o painel numa segunda tela: quando uma regra dispara, um **aviso grande com borda vermelha
-piscando** ocupa o meio da tela até você reconhecer (o título da aba também pisca). Notificação do
+Deixe o painel numa segunda tela: quando uma regra dispara, um **cartão de aviso** aparece no canto
+inferior esquerdo até você reconhecer (o título da aba também pisca). Os avisos nunca bloqueiam o painel:
+cada um pode ser visto, reconhecido ou minimizado, e a bandeja inteira vira um selo com a contagem.
+O **🕘** abre o histórico de alarmes; clicar num item abre a issue. Notificação do
 sistema e som são opcionais. **Nada sai da sua máquina** — os alarmes funcionam com o monitor aberto.
 
 Abra **🔔 Alarmes** no topo para ligar/desligar regras, ajustar os números, **testar** como o aviso

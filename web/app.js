@@ -308,6 +308,7 @@ async function loadAll() {
   loadAbort = new AbortController();
   const signal = loadAbort.signal;
   renderActiveFilters();
+  syncUrl();
   document.body.classList.add("is-loading");
   try {
     const [summary, timeline, breakdown, issues, alarms] = await Promise.all([
@@ -334,6 +335,7 @@ async function loadAll() {
 let searchTimer;
 let issuesSeq = 0;
 function loadIssuesOnly() {
+  syncUrl();
   clearTimeout(searchTimer);
   searchTimer = setTimeout(async () => {
     const seq = ++issuesSeq;
@@ -359,6 +361,92 @@ function renderActiveFilters() {
   $("activeFilters").innerHTML = chips.join("");
 }
 
+// ------------------------------------------------------------------ estado na URL
+// #issue=…&period=24h&service=…&category=…&status=…&q=…&search=…&scope=aws&srange=…&panel=alarms|history
+const RANGES = ["1h", "6h", "24h", "7d", "30d"];
+const STATUSES = ["open", "resolved", "ignored", "all"];
+let urlHash = "";
+function buildHash() {
+  const p = new URLSearchParams();
+  if (state.issue) p.set("issue", state.issue);
+  p.set("period", state.range);
+  if (state.service) p.set("service", state.service);
+  if (state.category) p.set("category", state.category);
+  if (state.status !== "open") p.set("status", state.status);
+  if (state.q) p.set("q", state.q);
+  if ($("searchModal").classList.contains("show")) {
+    const f = $("searchForm").elements;
+    p.set("search", f.text.value.trim());
+    if (f.aws.checked) p.set("scope", "aws");
+    if (f.range.value !== "24h") p.set("srange", f.range.value);
+  }
+  if ($("alarmsModal").classList.contains("show")) p.set("panel", "alarms");
+  else if (typeof alertHistoryVisible === "function" && alertHistoryVisible()) p.set("panel", "history");
+  return `#${p}`;
+}
+// push só ao abrir uma issue, para o Voltar do navegador fechá-la; o resto substitui a entrada atual
+function syncUrl(push = false) {
+  const hash = buildHash();
+  if (hash === urlHash && !push) return;
+  urlHash = hash;
+  if (push) history.pushState({ issue: true }, "", hash);
+  else history.replaceState(history.state, "", hash);
+}
+// Aplica filtros/período da URL ao estado e aos controles; diz se algo mudou (precisa recarregar os dados)
+function readHashState(p) {
+  const next = {
+    range: RANGES.includes(p.get("period")) ? p.get("period") : state.range,
+    service: p.get("service") || "", category: p.get("category") || "",
+    status: STATUSES.includes(p.get("status")) ? p.get("status") : "open", q: p.get("q") || "",
+  };
+  const changed = Object.keys(next).some((k) => state[k] !== next[k]);
+  Object.assign(state, next);
+  document.querySelectorAll("#rangeSeg button").forEach((x) => x.classList.toggle("active", x.dataset.range === state.range));
+  document.querySelectorAll("#statusSeg button").forEach((x) => x.classList.toggle("active", x.dataset.status === state.status));
+  $("search").value = state.q;
+  return changed;
+}
+// Issue aberta e painéis (busca, alarmes, histórico)
+function applyHashViews(p) {
+  const issue = /^[0-9a-f]{16}$/.test(p.get("issue") || "") ? p.get("issue") : null;
+  if (issue && issue !== state.issue) loadIssue(issue, true, false);
+  else if (!issue && state.issue) closeDrawer(false);
+
+  const searchOpen = $("searchModal").classList.contains("show");
+  if (p.has("search")) {
+    const f = $("searchForm").elements;
+    const text = p.get("search");
+    const aws = p.get("scope") === "aws";
+    const range = p.get("srange") || "24h";
+    const same = searchOpen && f.text.value.trim() === text && f.aws.checked === aws && f.range.value === range;
+    if (!same) {
+      f.text.value = text;
+      f.aws.checked = aws;
+      $("awsWarning").classList.toggle("hidden", !aws);
+      if ([...f.range.options].some((o) => o.value === range)) f.range.value = range;
+      openSearch();
+      // a busca local roda sozinha; a da AWS espera o clique, porque gera custo
+      if (!aws && text.length >= 2) runSearch();
+    }
+  } else if (searchOpen) {
+    $("searchModal").classList.remove("show");
+  }
+
+  const panel = p.get("panel");
+  const alarmsOpen = $("alarmsModal").classList.contains("show");
+  if (panel === "alarms" && !alarmsOpen) openAlarms();
+  else if (panel !== "alarms" && alarmsOpen) $("alarmsModal").classList.remove("show");
+  if ((panel === "history") !== alertHistoryVisible()) showAlertHistory(panel === "history");
+}
+function onHashChange() {
+  if (location.hash === urlHash) return;   // popstate e hashchange chegam juntos: aplica uma vez
+  urlHash = location.hash;
+  const p = new URLSearchParams(location.hash.slice(1));
+  const changed = readHashState(p);
+  applyHashViews(p);
+  if (changed) loadAll();
+}
+
 // ------------------------------------------------------------------ status da coleta
 // Reinício automático: se o servidor reiniciou (código novo) ou as telas mudaram, recarrega a página.
 // Espera se você estiver digitando algo, para não perder o texto.
@@ -369,7 +457,6 @@ function checkReload(s) {
   const el = document.activeElement;
   if (el && /^(TEXTAREA|INPUT)$/.test(el.tagName) && el.value && el.type !== "checkbox") return;
   state.reloading = true;
-  if (state.issue) history.replaceState(null, "", `#issue=${state.issue}`); // reabre a issue que estava aberta
   toast("Monitor atualizado — recarregando a página…", "good");
   setTimeout(() => location.reload(), 900);
 }
@@ -519,11 +606,12 @@ async function checkNew() {
 }
 
 // ------------------------------------------------------------------ detalhe da issue
-async function loadIssue(fp, openDrawer = true) {
+async function loadIssue(fp, openDrawer = true, pushUrl = true) {
   try {
     const data = await api(`/api/issue/${fp}?${qs()}`);
     const it = data.issue;
     const changed = state.issue !== fp;
+    const wasOpen = $("drawer").classList.contains("open");
     state.issue = fp;
     $("btnDownload").href = `/api/issue/${fp}/log.txt`;
     $("dTitle").textContent = it.title;
@@ -571,6 +659,7 @@ async function loadIssue(fp, openDrawer = true) {
       $("drawer").classList.add("open");
       $("drawer").setAttribute("aria-hidden", "false");
       $("backdrop").classList.add("show");
+      syncUrl(changed && pushUrl && !wasOpen);   // trocar de issue com o painel aberto não empilha
     }
   } catch (e) {
     toast(`Não consegui abrir a issue: ${esc(e.message)}`, "critical");
@@ -606,12 +695,16 @@ async function showEvent(id) {
   markActiveEvent();
   return ev;
 }
-function closeDrawer() {
+function closeDrawer(updateUrl = true) {
+  const wasOpen = !!state.issue;
   state.issue = null;
   state.eventId = null;
   $("drawer").classList.remove("open");
   $("drawer").setAttribute("aria-hidden", "true");
   $("backdrop").classList.remove("show");
+  if (!updateUrl || !wasOpen) return;
+  if (history.state?.issue) history.back();   // desfaz a entrada criada ao abrir a issue
+  else syncUrl();
 }
 async function setIssueStatus(status) {
   try {
@@ -751,8 +844,8 @@ function bind() {
     if (e.target.closest(".ev-full")) return; // deixa selecionar/copiar o texto expandido
     const li = e.target.closest("li[data-id]"); if (li) toggleEvent(li);
   });
-  $("closeDrawer").addEventListener("click", closeDrawer);
-  $("backdrop").addEventListener("click", closeDrawer);
+  $("closeDrawer").addEventListener("click", () => closeDrawer());
+  $("backdrop").addEventListener("click", () => closeDrawer());
   $("btnResolve").addEventListener("click", () => setIssueStatus("resolved"));
   $("btnIgnore").addEventListener("click", () => setIssueStatus("ignored"));
   $("btnReopen").addEventListener("click", () => setIssueStatus("open"));
@@ -795,6 +888,12 @@ function bind() {
     if (open) open.classList.remove("show"); else closeDrawer();
   });
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => loadAll());
+  // modais fecham por vários caminhos (✕, fundo, Esc, código): observa a classe em vez de cada um
+  const watchModal = new MutationObserver(() => syncUrl());
+  for (const id of ["searchModal", "alarmsModal"]) watchModal.observe($(id), { attributes: true, attributeFilter: ["class"] });
+  $("searchForm").addEventListener("input", () => syncUrl());
+  window.addEventListener("hashchange", onHashChange);
+  window.addEventListener("popstate", onHashChange);
 }
 
 // ------------------------------------------------------------------ início
@@ -805,10 +904,11 @@ function bind() {
   document.querySelectorAll("#rangeSeg button").forEach((x) => x.classList.toggle("active", x.dataset.range === state.range));
   Chart.defaults.font.family = 'system-ui, -apple-system, "Segoe UI", sans-serif';
   bind();
+  const fromUrl = new URLSearchParams(location.hash.slice(1));
+  readHashState(fromUrl);
   await pollStatus();
   await loadAll();
-  const deep = location.hash.match(/^#issue=([0-9a-f]{16})$/);
-  if (deep) loadIssue(deep[1]);
+  applyHashViews(fromUrl);
   setInterval(pollStatus, 5000);
   setInterval(renderCollector, 1000);
   setInterval(loadAll, 60000);

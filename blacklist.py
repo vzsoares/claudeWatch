@@ -2,7 +2,8 @@
 
 Diferente de "Ignorar" (que só esconde a issue dos gráficos), um erro bloqueado some de verdade:
 as ocorrências já guardadas são apagadas e as próximas são descartadas na coleta — não aparecem,
-não contam como erro e não disparam alarme, até a entrada ser removida da lista.
+não contam como erro e não disparam alarme, até o prazo escolhido acabar (3, 10, 20, 30 ou 60 dias)
+ou, se for "sempre", até a entrada ser removida da lista.
 
 Dois tipos de entrada:
   issue  bloqueia uma issue exata (pelo fingerprint)
@@ -14,6 +15,22 @@ import db
 MIN_TEXT = 3
 MIN_NOTE = 10
 SAMPLE_CHARS = 2000
+DURATION_DAYS = (3, 10, 20, 30, 60)  # ou None = sempre
+
+
+def _check_days(days) -> int | None:
+    if days in (None, "", "always", "sempre", 0, "0"):
+        return None
+    try:
+        days = int(days)
+    except (TypeError, ValueError):
+        days = -1
+    if days not in DURATION_DAYS:
+        raise ValueError(f"Período inválido: escolha {', '.join(map(str, DURATION_DAYS))} dias ou sempre")
+    return days
+
+
+_ACTIVE = "(expires_at IS NULL OR expires_at > ?)"
 
 
 def _check_note(note: str) -> str:
@@ -24,20 +41,33 @@ def _check_note(note: str) -> str:
     return note
 
 
-def list_entries(conn) -> list[dict]:
-    return db.rows(conn.execute("SELECT * FROM blacklist ORDER BY created_at DESC"))
+def list_entries(conn, active_only: bool = False) -> list[dict]:
+    now = db.now_ms()
+    rows = db.rows(conn.execute("SELECT * FROM blacklist" + (f" WHERE {_ACTIVE}" if active_only else "")
+                                + " ORDER BY created_at DESC", (now,) if active_only else ()))
+    for r in rows:
+        r["active"] = r["expires_at"] is None or r["expires_at"] > now
+    return rows
 
 
-def add_issue(conn, fingerprint: str, note: str) -> dict:
-    note = _check_note(note)
+def _duplicate(conn, where: str, args: tuple) -> bool:
+    """Já bloqueado e dentro do prazo? Entradas vencidas iguais são trocadas pela nova."""
+    if conn.execute(f"SELECT 1 FROM blacklist WHERE {where} AND {_ACTIVE}", args + (db.now_ms(),)).fetchone():
+        return True
+    conn.execute(f"DELETE FROM blacklist WHERE {where}", args)
+    return False
+
+
+def add_issue(conn, fingerprint: str, note: str, days=None) -> dict:
+    note, days = _check_note(note), _check_days(days)
     issue = conn.execute("SELECT title, service FROM issues WHERE fingerprint = ?", (fingerprint,)).fetchone()
     if issue is None:
         raise ValueError("Issue não encontrada")
-    if conn.execute("SELECT 1 FROM blacklist WHERE kind = 'issue' AND value = ?", (fingerprint,)).fetchone():
+    if _duplicate(conn, "kind = 'issue' AND value = ?", (fingerprint,)):
         raise ValueError("Essa issue já está na lista de bloqueio")
     sample = conn.execute("SELECT message FROM events WHERE fingerprint = ? ORDER BY ts DESC LIMIT 1",
                           (fingerprint,)).fetchone()
-    entry_id = _insert(conn, "issue", fingerprint, "", issue["title"], sample[0] if sample else "", note)
+    entry_id = _insert(conn, "issue", fingerprint, "", issue["title"], sample[0] if sample else "", note, days)
     removed = _drop(conn, [r[0] for r in conn.execute("SELECT id FROM events WHERE fingerprint = ?", (fingerprint,))])
     conn.execute("DELETE FROM issues WHERE fingerprint = ?", (fingerprint,))
     _ack_alerts(conn, [fingerprint])
@@ -45,13 +75,12 @@ def add_issue(conn, fingerprint: str, note: str) -> dict:
     return {"id": entry_id, "removed": removed}
 
 
-def add_text(conn, text: str, service: str, note: str) -> dict:
-    note = _check_note(note)
+def add_text(conn, text: str, service: str, note: str, days=None) -> dict:
+    note, days = _check_note(note), _check_days(days)
     text, service = (text or "").strip(), (service or "").strip()
     if len(text) < MIN_TEXT:
         raise ValueError(f"Informe o texto a bloquear (mínimo {MIN_TEXT} caracteres)")
-    if conn.execute("SELECT 1 FROM blacklist WHERE kind = 'text' AND value = ? AND service = ?",
-                    (text, service)).fetchone():
+    if _duplicate(conn, "kind = 'text' AND value = ? AND service = ?", (text, service)):
         raise ValueError("Esse texto já está na lista de bloqueio")
     m = Matcher.single("text", text, service)
     ids, sample = [], ""
@@ -59,7 +88,7 @@ def add_text(conn, text: str, service: str, note: str) -> dict:
         if m.match_text(e["service"], e["message"]):
             ids.append(e["id"])
             sample = sample or e["message"]
-    entry_id = _insert(conn, "text", text, service, text, sample, note)
+    entry_id = _insert(conn, "text", text, service, text, sample, note, days)
     removed = _drop(conn, ids)
     conn.commit()
     return {"id": entry_id, "removed": removed}
@@ -70,11 +99,13 @@ def remove(conn, entry_id: int) -> None:
     conn.commit()
 
 
-def _insert(conn, kind, value, service, label, sample, note) -> int:
+def _insert(conn, kind, value, service, label, sample, note, days) -> int:
+    now = db.now_ms()
     return conn.execute(
-        "INSERT INTO blacklist(kind, value, service, label, sample, note, created_at) VALUES (?,?,?,?,?,?,?)",
-        (kind, value, service, label[:300], (sample or "")[:SAMPLE_CHARS], note[:500],
-         db.now_ms())).lastrowid
+        "INSERT INTO blacklist(kind, value, service, label, sample, note, created_at, expires_at) "
+        "VALUES (?,?,?,?,?,?,?,?)",
+        (kind, value, service, label[:300], (sample or "")[:SAMPLE_CHARS], note[:500], now,
+         now + days * 86_400_000 if days else None)).lastrowid
 
 
 def _drop(conn, event_ids: list[int]) -> int:
@@ -119,7 +150,7 @@ class Matcher:
 
     @classmethod
     def load(cls, conn) -> "Matcher":
-        return cls(list_entries(conn))
+        return cls(list_entries(conn, active_only=True))  # vencidos voltam a ser coletados
 
     @classmethod
     def single(cls, kind: str, value: str, service: str = "") -> "Matcher":

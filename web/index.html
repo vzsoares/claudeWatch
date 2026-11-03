@@ -133,7 +133,7 @@
       <button class="btn" id="btnResolve">✓ Resolver</button>
       <button class="btn" id="btnIgnore">⊘ Ignorar</button>
       <button class="btn hidden" id="btnReopen">↺ Reabrir</button>
-      <button class="btn danger-ghost" id="btnBlock" title="Falso alarme: apaga as ocorrências e nunca mais conta este erro, até você tirar da lista de bloqueio">🚫 Ignorar sempre</button>
+      <button class="btn danger-ghost" id="btnBlock" title="Falso alarme: apaga as ocorrências e para de contar este erro por 3 a 60 dias, ou para sempre">🚫 Ignorar por…</button>
       <a class="btn" id="btnConsole" target="_blank" rel="noopener">AWS Console ↗</a>
     </div>
     <dl class="facts" id="dFacts"></dl>
@@ -393,25 +393,34 @@
   </div>
 </div>
 
-<!-- Ignorar sempre (uma issue) -->
+<!-- Ignorar por um período (uma issue) -->
 <div class="modal" id="blockModal" role="dialog" aria-modal="true" aria-labelledby="blockTitle">
   <div class="modal-box">
     <div class="modal-head">
-      <h2 id="blockTitle">🚫 Ignorar sempre este erro?</h2>
+      <h2 id="blockTitle">🚫 Ignorar este erro</h2>
       <button class="btn icon" data-close aria-label="Fechar">✕</button>
     </div>
     <form class="alarm-form" id="blockForm" autocomplete="off">
       <div class="block-issue" id="blockIssue"></div>
+      <div class="period-pick" role="radiogroup" aria-label="Por quanto tempo">
+        <span class="muted small">Ignorar por:</span>
+        <label><input type="radio" name="days" value="3" checked><span>3 dias</span></label>
+        <label><input type="radio" name="days" value="10"><span>10 dias</span></label>
+        <label><input type="radio" name="days" value="20"><span>20 dias</span></label>
+        <label><input type="radio" name="days" value="30"><span>30 dias</span></label>
+        <label><input type="radio" name="days" value="60"><span>60 dias</span></label>
+        <label><input type="radio" name="days" value=""><span>Sempre</span></label>
+      </div>
       <p class="muted small">As ocorrências já guardadas deste erro serão <strong>apagadas</strong> e as próximas serão
-        descartadas na coleta: ele não aparece mais, não conta como erro e não dispara alarme. Para voltar ao normal,
-        remova-o da <strong>lista de bloqueio</strong> (botão 🚫 no topo).</p>
+        descartadas na coleta: ele não aparece, não conta como erro e não dispara alarme. Quando o período acabar, ele
+        volta a ser registrado sozinho. Para voltar antes, remova-o da <strong>lista de bloqueio</strong> (botão 🚫 no topo).</p>
       <label>Justificativa <span class="muted small">(obrigatória — por que é um falso alarme?)</span>
         <textarea name="note" rows="3" required minlength="10" maxlength="500"
           placeholder="ex.: aviso do Node sobre listeners, não afeta o usuário; correção agendada no card 123"></textarea></label>
       <div class="settings-msg" id="blockMsg"></div>
       <div class="modal-foot">
         <button type="button" class="btn" data-close>Cancelar</button>
-        <button type="submit" class="btn danger">🚫 Ignorar sempre</button>
+        <button type="submit" class="btn danger" id="blockGo">🚫 Ignorar por 3 dias</button>
       </div>
     </form>
   </div>
@@ -425,8 +434,8 @@
       <button class="btn icon" data-close aria-label="Fechar">✕</button>
     </div>
     <p class="muted small">Erros marcados como falso alarme. Enquanto estiverem aqui, são descartados na coleta: não
-      aparecem, não contam como erro e não disparam alarme. Ao remover da lista, as <strong>próximas</strong> ocorrências
-      voltam a ser registradas (as que foram descartadas não voltam).</p>
+      aparecem, não contam como erro e não disparam alarme. Quando o período acaba (ou ao remover da lista), as
+      <strong>próximas</strong> ocorrências voltam a ser registradas (as que foram descartadas não voltam).</p>
     <ul class="alarm-rules" id="blacklistItems"></ul>
 
     <form class="alarm-form" id="blacklistForm" autocomplete="off">
@@ -437,6 +446,15 @@
       </div>
       <label>Justificativa <span class="muted small">(obrigatória)</span>
         <textarea name="note" rows="2" required minlength="10" maxlength="500" placeholder="por que é um falso alarme?"></textarea></label>
+      <div class="period-pick" role="radiogroup" aria-label="Por quanto tempo">
+        <span class="muted small">Ignorar por:</span>
+        <label><input type="radio" name="days" value="3" checked><span>3 dias</span></label>
+        <label><input type="radio" name="days" value="10"><span>10 dias</span></label>
+        <label><input type="radio" name="days" value="20"><span>20 dias</span></label>
+        <label><input type="radio" name="days" value="30"><span>30 dias</span></label>
+        <label><input type="radio" name="days" value="60"><span>60 dias</span></label>
+        <label><input type="radio" name="days" value=""><span>Sempre</span></label>
+      </div>
       <div class="settings-msg" id="blacklistMsg"></div>
       <div class="modal-foot">
         <button type="submit" class="btn danger">🚫 Bloquear</button>

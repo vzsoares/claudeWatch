@@ -672,9 +672,10 @@ class Handler(BaseHTTPRequestHandler):
                 if path == "/api/blacklist":
                     b = self._body()
                     if b.get("fingerprint"):
-                        return self._send(200, blacklist.add_issue(conn, str(b["fingerprint"]), b.get("note", "")))
+                        return self._send(200, blacklist.add_issue(conn, str(b["fingerprint"]), b.get("note", ""),
+                                                                   b.get("days")))
                     return self._send(200, blacklist.add_text(conn, b.get("text", ""), b.get("service", ""),
-                                                              b.get("note", "")))
+                                                              b.get("note", ""), b.get("days")))
                 m = re.fullmatch(r"/api/blacklist/(\d+)/delete", path)
                 if m:
                     blacklist.remove(conn, int(m.group(1)))

@@ -470,3 +470,16 @@ tr:has(.cat-warning) .issue-title { color: var(--ink-2); }
 /* baixar logs */
 .export-quick { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .export-count { font-size: 14px; font-weight: 600; padding: 8px 10px; border-radius: 8px; background: var(--surface-2); }
+
+/* escolha do período do bloqueio */
+.period-pick { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.period-pick label { flex-direction: row !important; gap: 0 !important; }
+.period-pick input { position: absolute; opacity: 0; pointer-events: none; }
+.period-pick span:not(.muted) {
+  padding: 4px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface);
+  font-size: 13px; color: var(--ink); cursor: pointer;
+}
+.period-pick input:checked + span { background: var(--critical); border-color: var(--critical); color: #fff; font-weight: 600; }
+.period-pick input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+#blacklistItems li.expired { opacity: .6; }
+.bl-until { font-weight: 600; }

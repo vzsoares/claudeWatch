@@ -123,7 +123,8 @@ CREATE TABLE IF NOT EXISTS blacklist (
     note        TEXT NOT NULL,                -- justificativa (obrigatória)
     created_at  INTEGER NOT NULL,
     hits        INTEGER NOT NULL DEFAULT 0,   -- ocorrências descartadas na coleta desde o bloqueio
-    last_hit_ts INTEGER
+    last_hit_ts INTEGER,
+    expires_at  INTEGER                       -- fim do bloqueio (NULL = sempre)
 );
 """
 
@@ -147,6 +148,8 @@ def init() -> None:
         conn.executescript(SCHEMA)
         if "kind" not in {r[1] for r in conn.execute("PRAGMA table_info(runs)")}:
             conn.execute("ALTER TABLE runs ADD COLUMN kind TEXT NOT NULL DEFAULT 'live'")
+        if "expires_at" not in {r[1] for r in conn.execute("PRAGMA table_info(blacklist)")}:
+            conn.execute("ALTER TABLE blacklist ADD COLUMN expires_at INTEGER")
         if "creation_time" not in {r[1] for r in conn.execute("PRAGMA table_info(log_groups)")}:
             conn.execute("ALTER TABLE log_groups ADD COLUMN creation_time INTEGER")
             conn.execute("UPDATE log_groups SET updated_at = 0")  # força recarregar com a data de criação

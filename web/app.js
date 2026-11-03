@@ -198,28 +198,36 @@ function hbar(key, canvasId, rows, labelOf, onPick, selected) {
   opts.interaction = { mode: "nearest", axis: "y", intersect: false };
   opts.plugins.legend = { display: false };
   opts.plugins.tooltip.callbacks = {
-    label: (i) => ` ${nf.format(i.parsed.x)} erros`,
+    label: (i) => ` ${nf.format(i.parsed.x)} ${i.dataset.unit || (rows[i.dataIndex]?.name === "warning" ? "warnings" : "erros")}`,
     footer: (items) => (!items.length ? "" : rows[items[0].dataIndex]?.name === selected ? "clique para limpar o filtro" : "clique para filtrar"),
   };
-  const color = css("--s1");
   // Com filtro ativo, a barra selecionada fica forte e as outras esmaecidas (continuam clicáveis)
-  const colors = rows.map((r) => (!selected || r.name === selected ? color : withAlpha(color, "55")));
+  const paint = (color, r) => (!selected || r.name === selected ? color : withAlpha(color, "55"));
+  // warnings em amarelo: na barra própria (categorias) ou empilhados ao lado dos erros (serviços, campo "w")
+  const colors = rows.map((r) => paint(css(r.name === "warning" ? "--warning" : "--s1"), r));
+  const stacked = rows.some((r) => r.w);
+  const bar = { borderRadius: 4, borderSkipped: "start", barPercentage: 0.75, categoryPercentage: 0.9 };
+  const datasets = stacked
+    ? [{ ...bar, label: "Erros", unit: "erros", data: rows.map((r) => r.n), backgroundColor: rows.map((r) => paint(css("--s1"), r)), borderRadius: 0 },
+       { ...bar, label: "⚠️ Warnings", unit: "warnings", data: rows.map((r) => r.w || 0), backgroundColor: rows.map((r) => paint(css("--warning"), r)) }]
+    : [{ ...bar, data: rows.map((r) => r.n), backgroundColor: colors }];
+  if (stacked) opts.plugins.legend = { display: true, position: "top", align: "end", labels: { boxWidth: 10, boxHeight: 10, color: css("--ink-2"), font: { size: 11 } } };
   opts.scales = {
-    x: { beginAtZero: true, grid: { color: css("--grid") }, border: { display: false }, ticks: { color: css("--muted"), precision: 0, font: { size: 11 } } },
-    y: { grid: { display: false }, border: { color: css("--axis") }, ticks: { color: css("--ink-2"), font: { size: 12 }, callback(v) { const s = this.getLabelForValue(v); return s.length > 42 ? s.slice(0, 41) + "…" : s; } } },
+    x: { stacked, beginAtZero: true, grid: { color: css("--grid") }, border: { display: false }, ticks: { color: css("--muted"), precision: 0, font: { size: 11 } } },
+    y: { stacked, grid: { display: false }, border: { color: css("--axis") }, ticks: { color: css("--ink-2"), font: { size: 12 }, callback(v) { const s = this.getLabelForValue(v); return s.length > 42 ? s.slice(0, 41) + "…" : s; } } },
   };
   opts.onClick = (_, els) => els.length && onPick(rows[els[0].index]);
   opts.onHover = (e, els) => { if (e.native) e.native.target.style.cursor = els.length ? "pointer" : "default"; };
   upsertChart(key, canvasId, {
     type: "bar",
-    data: { labels: rows.map(labelOf), datasets: [{ data: rows.map((r) => r.n), backgroundColor: colors, borderRadius: 4, borderSkipped: "start", barPercentage: 0.75, categoryPercentage: 0.9 }] },
+    data: { labels: rows.map(labelOf), datasets },
     options: opts,
   });
 }
 
 function renderBreakdown(data) {
   state.knownServices = [...new Set([...(state.knownServices || []), ...data.services.map((s) => s.name)])];
-  $("servicesBox").style.height = `${Math.max(140, data.services.length * 26 + 40)}px`;
+  $("servicesBox").style.height = `${Math.max(140, data.services.length * 26 + 64)}px`;
   hbar("services", "servicesChart", data.services, (r) => r.name, (r) => setFilter("service", r.name), state.service);
   hbar("categories", "categoriesChart", data.categories, (r) => `${CATEGORY_ICONS[r.name] || ""} ${r.label}`.trim(), (r) => setFilter("category", r.name), state.category);
 

@@ -141,13 +141,15 @@ def api_breakdown(conn, qs):
     start, _, _ = _range(qs)
     base = ("FROM events e JOIN issues i ON i.fingerprint = e.fingerprint "
             "WHERE i.status != 'ignored' AND e.ts >= ?")
-    svc_sql, svc_args = _filters({"category": qs.get("category")})
-    cat_sql, cat_args = _filters({"service": qs.get("service")})
+    # Mostram tudo o que foi coletado, warnings inclusive — mas separados: n = erros, w = warnings
+    svc_sql, svc_args = _filters({"category": qs.get("category")}, errors_only=False)
+    cat_sql, cat_args = _filters({"service": qs.get("service")}, errors_only=False)
     services = db.rows(conn.execute(
-        f"SELECT e.service AS name, COUNT(*) AS n {base}{svc_sql} GROUP BY e.service ORDER BY n DESC LIMIT 12",
+        "SELECT e.service AS name, SUM(e.category != 'warning') AS n, SUM(e.category = 'warning') AS w "
+        f"{base}{svc_sql} GROUP BY e.service ORDER BY COUNT(*) DESC LIMIT 12",
         [start] + svc_args))
     if qs.get("service") and not any(s["name"] == qs["service"] for s in services):
-        services.append({"name": qs["service"], "n": 0})
+        services.append({"name": qs["service"], "n": 0, "w": 0})
     categories = db.rows(conn.execute(
         f"SELECT e.category AS name, COUNT(*) AS n {base}{cat_sql} GROUP BY e.category ORDER BY n DESC",
         [start] + cat_args))

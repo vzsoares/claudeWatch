@@ -7,6 +7,7 @@ import json
 import logging
 import re
 import threading
+import time
 
 import db
 import fingerprint as fp
@@ -14,6 +15,9 @@ import fingerprint as fp
 log = logging.getLogger("alerts")
 
 EVAL_INTERVAL_S = 30
+# Desde quando o monitor está de pé e acordado. "Coleta parada" só conta a partir daqui: logo depois de abrir
+# o monitor, ou de o computador voltar da suspensão, a última coleta é antiga sem que nada esteja errado.
+_awake_since = int(time.time() * 1000)
 
 KINDS = {
     "new_issue": "Issue nova",
@@ -252,13 +256,20 @@ def _evaluate_rule(conn, collector, rule, p, since, now) -> int:
                            f"cw:{a['name']}:{a['state_updated_at']}")
 
     elif kind == "stalled":
-        limit = int(p.get("minutes", 20)) * 60_000
+        # com coleta a cada 30/60 min, ficar 20 min sem coletar é normal: exige pelo menos 3 intervalos
+        interval = int(db.get_settings(conn).get("interval_min", "5") or 5)
+        limit = max(int(p.get("minutes", 20)), 3 * interval) * 60_000
         last_ok = conn.execute("SELECT MAX(finished_at) FROM runs WHERE kind = 'live' AND status IN ('ok','partial')"
                                ).fetchone()[0]
-        if collector is not None and last_ok and now - last_ok > limit:
+        since_ok = max(last_ok or 0, _awake_since)
+        if collector is not None and now - since_ok > limit:
+            err = conn.execute("SELECT error FROM runs WHERE kind = 'live' AND status = 'error' AND error IS NOT NULL "
+                               "ORDER BY id DESC LIMIT 1").fetchone()
+            ago = f"há {round((now - last_ok) / 60_000)} min" if last_ok else "desde que o monitor abriu"
             fired += _fire(conn, rule, "A coleta está parada",
-                           f"Nenhuma coleta bem-sucedida há {round((now - last_ok) / 60_000)} min. "
-                           "Verifique a internet e as credenciais da AWS.", f"stalled:{last_ok}")
+                           f"Nenhuma coleta bem-sucedida {ago}. "
+                           + (f"Último erro: {err[0][:300]}" if err else "Verifique a internet e as credenciais da AWS."),
+                           f"stalled:{last_ok}")
 
     elif kind == "silence" and collector is not None and p.get("group"):
         streams = collector.logs.describe_log_streams(logGroupName=p["group"], orderBy="LastEventTime",
@@ -302,9 +313,15 @@ class AlertLoop:
         self._wake.set()
 
     def _loop(self):
+        global _awake_since
+        last_tick = time.time()
         while True:
             self._wake.wait(EVAL_INTERVAL_S)
             self._wake.clear()
+            # um "tique" que demorou muito mais que o normal = o computador estava suspenso/hibernando
+            if time.time() - last_tick > EVAL_INTERVAL_S * 4:
+                _awake_since = int(time.time() * 1000)
+            last_tick = time.time()
             try:
                 with db.connect() as conn:
                     evaluate(conn, self.collector)

@@ -227,10 +227,12 @@ pre.log {
   background: var(--surface-2); border-radius: 8px; border: 1px solid var(--border);
   font: 12px/1.5 var(--mono); white-space: pre-wrap; word-break: break-word;
 }
-.events { list-style: none; margin: 0; padding: 0; max-height: 320px; overflow: auto; }
+.events { list-style: none; margin: 0; padding: 0; max-height: 640px; overflow: auto; }
 .events li { padding: 7px 8px; border-radius: 6px; cursor: pointer; border-bottom: 1px solid var(--grid); }
 .events li:hover { background: var(--surface-2); }
 .events li.active { background: var(--surface-2); box-shadow: inset 3px 0 0 var(--accent); }
+.events li.expanded .ev-prev { display: none; }
+.events li .ev-full { margin-top: 6px; max-height: 360px; background: var(--surface); cursor: text; user-select: text; }
 .ev-head { display: flex; gap: 10px; font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .ev-stream { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ev-prev { font: 11.5px/1.4 var(--mono); color: var(--ink); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

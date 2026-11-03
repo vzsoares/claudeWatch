@@ -127,6 +127,7 @@
     </div>
     <div class="drawer-actions">
       <button class="btn primary" id="btnPrompt">✨ Gerar Prompt</button>
+      <a class="btn" id="btnDownload" download title="Baixa em .txt tudo o que o monitor guardou sobre este erro: dados da issue e todas as ocorrências com o log completo">⬇ Baixar log (.txt)</a>
       <button class="btn" id="btnResolve">✓ Resolver</button>
       <button class="btn" id="btnIgnore">⊘ Ignorar</button>
       <button class="btn hidden" id="btnReopen">↺ Reabrir</button>
@@ -142,7 +143,7 @@
       <pre class="log" id="dMessage"></pre>
     </div>
     <div class="card-sub">
-      <h3>Ocorrências recentes <span class="muted small">(clique para ver o log)</span></h3>
+      <h3>Ocorrências recentes <span class="muted small">(clique para expandir o erro)</span></h3>
       <ul class="events" id="dEvents"></ul>
     </div>
   </div>

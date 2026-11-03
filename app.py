@@ -3,6 +3,7 @@
 Uso:  python app.py [--port 8765] [--no-browser]
 """
 import argparse
+import io
 import json
 import logging
 import mimetypes
@@ -11,6 +12,7 @@ import socket
 import threading
 import time
 import webbrowser
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -327,6 +329,33 @@ def api_issue(conn, fingerprint, qs):
             "timeline": {"labels": labels, "data": [counts.get(b, 0) for b in labels]}}
 
 
+def issue_log_text(conn, fingerprint):
+    """Tudo o que o banco local tem sobre a issue, em texto puro (botão "Baixar log")."""
+    issue = conn.execute("SELECT * FROM issues WHERE fingerprint = ?", (fingerprint,)).fetchone()
+    if issue is None:
+        return None
+    fmt = lambda ms: datetime.fromtimestamp(ms / 1000).strftime("%d/%m/%Y %H:%M:%S") if ms else "-"
+    events = conn.execute("SELECT ts, log_group, log_stream, message FROM events WHERE fingerprint = ? "
+                          "ORDER BY ts DESC", (fingerprint,)).fetchall()
+    out = io.StringIO()
+    out.write(f"Issue: {issue['title']}\n")
+    out.write(f"Fingerprint: {fingerprint}\n")
+    out.write(f"Categoria: {fp.CATEGORIES.get(issue['category'], issue['category'])} · "
+              f"Tipo: {fp.kind_of(issue['log_group'])}\n")
+    out.write(f"Serviço: {issue['service']}\nLog group: {issue['log_group']}\nStatus: {issue['status']}\n")
+    out.write(f"Ocorrências (total): {issue['count']} · guardadas localmente: {len(events)}\n")
+    out.write(f"Primeira vez: {fmt(issue['first_seen'])} · Última vez: {fmt(issue['last_seen'])}\n")
+    if issue["resolved_at"]:
+        out.write(f"Resolvida em: {fmt(issue['resolved_at'])}\n")
+    if issue["regressed_at"]:
+        out.write(f"Regressão em: {fmt(issue['regressed_at'])}\n")
+    out.write(f"Exportado em: {fmt(db.now_ms())}\n")
+    for i, e in enumerate(events, 1):
+        out.write(f"\n{'=' * 100}\n#{i} · {fmt(e['ts'])} · {e['log_group']} · {e['log_stream']}\n{'-' * 100}\n")
+        out.write(e["message"].rstrip() + "\n")
+    return out.getvalue()
+
+
 def api_event(conn, event_id):
     row = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
     return dict(row) if row else None
@@ -405,10 +434,12 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):  # silencioso: o painel faz polling a cada poucos segundos
         pass
 
-    def _send(self, code, body, ctype="application/json; charset=utf-8"):
+    def _send(self, code, body, ctype="application/json; charset=utf-8", headers=None):
         data = body if isinstance(body, bytes) else json.dumps(body, ensure_ascii=False, default=str).encode()
         self.send_response(code)
         self.send_header("Content-Type", ctype)
+        for k, v in (headers or {}).items():
+            self.send_header(k, v)
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("Connection", "close")
@@ -507,6 +538,15 @@ class Handler(BaseHTTPRequestHandler):
                 if m:
                     data = api_issue(conn, m.group(1), qs)
                     return self._send(200 if data else 404, data or {"error": "issue não encontrada"})
+                m = re.fullmatch(r"/api/issue/([0-9a-f]{16})/log\.txt", path)
+                if m:
+                    text = issue_log_text(conn, m.group(1))
+                    if text is None:
+                        return self._send(404, {"error": "issue não encontrada"})
+                    name = f"issue-{m.group(1)}-{datetime.now():%Y%m%d-%H%M}.txt"
+                    # BOM: o Bloco de Notas do Windows abre os acentos certos
+                    return self._send(200, ("﻿" + text).encode("utf-8"), "text/plain; charset=utf-8",
+                                      {"Content-Disposition": f'attachment; filename="{name}"'})
                 m = re.fullmatch(r"/api/issue/([0-9a-f]{16})/prompt", path)
                 if m:
                     text = prompt_builder.build(

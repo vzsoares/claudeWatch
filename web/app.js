@@ -498,6 +498,7 @@ async function loadIssue(fp, openDrawer = true) {
     const it = data.issue;
     const changed = state.issue !== fp;
     state.issue = fp;
+    $("btnDownload").href = `/api/issue/${fp}/log.txt`;
     $("dTitle").textContent = it.title;
     $("dMeta").innerHTML = `${issueBadge(it)}<span class="pill">${esc(it.category_label)}</span><span class="pill">${esc(it.kind)}</span><span class="pill">${esc(it.service)}</span>`;
     $("dFacts").innerHTML = [
@@ -519,9 +520,21 @@ async function loadIssue(fp, openDrawer = true) {
       options: opts,
     });
 
+    // a atualização automática redesenha a lista: guarda o que estava expandido para reabrir igual
+    const keep = changed ? new Map() : new Map([...document.querySelectorAll("#dEvents li.expanded")]
+      .map((li) => [li.dataset.id, li.querySelector(".ev-full").textContent])
+      .filter(([, text]) => text !== "Carregando…"));
     $("dEvents").innerHTML = data.events.map((e) => `
       <li data-id="${e.id}"><div class="ev-head"><span>${fmtFull(e.ts)}</span><span class="ev-stream">${esc(e.log_stream)}</span></div>
-      <div class="ev-prev">${esc(e.preview)}</div></li>`).join("");
+      <div class="ev-prev">${esc(e.preview)}</div><pre class="log ev-full hidden"></pre></li>`).join("");
+    keep.forEach((text, id) => {
+      const li = $("dEvents").querySelector(`li[data-id="${id}"]`);
+      if (!li) return;
+      li.classList.add("expanded");
+      const full = li.querySelector(".ev-full");
+      full.textContent = text;
+      full.classList.remove("hidden");
+    });
     if (changed || !data.events.some((e) => e.id === state.eventId)) {
       if (data.events.length) await showEvent(data.events[0].id);
     } else {
@@ -539,6 +552,24 @@ async function loadIssue(fp, openDrawer = true) {
 function markActiveEvent() {
   document.querySelectorAll("#dEvents li").forEach((li) => li.classList.toggle("active", Number(li.dataset.id) === state.eventId));
 }
+// Clique numa ocorrência: expande o erro completo na própria linha (e atualiza o "Log completo" acima).
+async function toggleEvent(li) {
+  const full = li.querySelector(".ev-full");
+  if (li.classList.contains("expanded")) {
+    li.classList.remove("expanded");
+    full.classList.add("hidden");
+    return;
+  }
+  try {
+    full.textContent = "Carregando…";
+    full.classList.remove("hidden");
+    li.classList.add("expanded");
+    const ev = await showEvent(Number(li.dataset.id));
+    full.textContent = ev.message;
+  } catch (e) {
+    full.textContent = `Não consegui carregar o log: ${e.message}`;
+  }
+}
 async function showEvent(id) {
   const ev = await api(`/api/event/${id}`);
   state.eventId = ev.id;
@@ -546,6 +577,7 @@ async function showEvent(id) {
   $("dEventInfo").textContent = `· ${fmtFull(ev.ts)} · ${ev.log_stream}`;
   $("btnConsole").href = consoleUrl(ev.log_group, ev.log_stream);
   markActiveEvent();
+  return ev;
 }
 function closeDrawer() {
   state.issue = null;
@@ -689,7 +721,8 @@ function bind() {
     const tr = e.target.closest("tr[data-fp]"); if (tr) loadIssue(tr.dataset.fp);
   });
   $("dEvents").addEventListener("click", (e) => {
-    const li = e.target.closest("li[data-id]"); if (li) showEvent(Number(li.dataset.id));
+    if (e.target.closest(".ev-full")) return; // deixa selecionar/copiar o texto expandido
+    const li = e.target.closest("li[data-id]"); if (li) toggleEvent(li);
   });
   $("closeDrawer").addEventListener("click", closeDrawer);
   $("backdrop").addEventListener("click", closeDrawer);

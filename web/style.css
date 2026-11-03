@@ -452,3 +452,13 @@ h3.sub { margin-top: 4px; }
   .row2, .row3 { grid-template-columns: 1fr; }
   input[type="search"] { min-width: 0; width: 100%; }
 }
+
+/* lista de bloqueio */
+.btn.danger { background: var(--critical); color: #fff; border-color: var(--critical); font-weight: 600; }
+.btn.danger:hover { filter: brightness(1.08); }
+.btn.danger-ghost { color: var(--critical-text); }
+.block-issue { padding: 10px 12px; border-radius: 10px; background: var(--surface-2); font-weight: 600; word-break: break-word; }
+.block-issue .muted { font-weight: 400; }
+.bl-note { font-size: 13px; margin-top: 4px; }
+.bl-sample { margin-top: 6px; max-height: 120px; font-size: 11.5px; }
+#blacklistItems li { grid-template-columns: 1fr auto; align-items: start; }

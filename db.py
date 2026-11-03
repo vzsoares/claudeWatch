@@ -112,6 +112,19 @@ CREATE TABLE IF NOT EXISTS alarm_history (
     reason    TEXT,
     ts        INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS blacklist (
+    id          INTEGER PRIMARY KEY,
+    kind        TEXT NOT NULL,                -- issue (fingerprint exato) | text (mensagem contém o texto)
+    value       TEXT NOT NULL,
+    service     TEXT NOT NULL DEFAULT '',     -- text: só serviços cujo nome contenha isto (vazio = todos)
+    label       TEXT NOT NULL,                -- o que mostrar na lista (título da issue ou o texto)
+    sample      TEXT,                         -- exemplo da mensagem bloqueada
+    note        TEXT NOT NULL,                -- justificativa (obrigatória)
+    created_at  INTEGER NOT NULL,
+    hits        INTEGER NOT NULL DEFAULT 0,   -- ocorrências descartadas na coleta desde o bloqueio
+    last_hit_ts INTEGER
+);
 """
 
 

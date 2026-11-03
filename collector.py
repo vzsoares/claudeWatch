@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 import boto3
 from botocore.config import Config
 
+import blacklist
 import db
 import fingerprint as fp
 from config import (AWS_PROFILE, AWS_REGION, INSIGHTS_MAX_GROUPS, INSIGHTS_MAX_ROWS,
@@ -521,6 +522,7 @@ def ingest(conn, rows: list[dict], settings: dict, fetch_block=None, backfill: b
     ignore_low = settings.get("ignore_low_level", "1") == "1"
     now = db.now_ms()
     events_new = issues_new = fetches = 0
+    blocked = blacklist.Matcher.load(conn)
     for b in _to_blocks(rows, ignore_low):
         group, stream, ts = b["group"], b["stream"], b["ts"]
         # Chave estável (independe da ordem das linhas): a mesma ocorrência na sobreposição é descartada.
@@ -540,6 +542,8 @@ def ingest(conn, rows: list[dict], settings: dict, fetch_block=None, backfill: b
         category = fp.classify(message)
         title = fp.extract_title(message)
         fprint = fp.fingerprint(service, category, title)
+        if blocked.blocked(fprint, service, message, ts):
+            continue  # falso alarme na lista de bloqueio: não guarda nem conta
 
         cur = conn.execute(
             "INSERT OR IGNORE INTO events(event_key, fingerprint, ts, service, log_group, log_stream, "
@@ -565,6 +569,7 @@ def ingest(conn, rows: list[dict], settings: dict, fetch_block=None, backfill: b
             if issue["status"] == "resolved" and ts > (issue["resolved_at"] or 0):
                 conn.execute("UPDATE issues SET status='open', regressed_at=? WHERE fingerprint=?",
                              (now, fprint))
+    blocked.save(conn)
     conn.commit()
     return {"events_new": events_new, "issues_new": issues_new}
 

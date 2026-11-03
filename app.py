@@ -17,6 +17,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 import alerts
+import blacklist
 import db
 import fingerprint as fp
 import prompt as prompt_builder
@@ -528,6 +529,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(200, api_alarms(conn))
                 if path == "/api/alerts":
                     return self._send(200, api_alerts(conn))
+                if path == "/api/blacklist":
+                    return self._send(200, {"items": blacklist.list_entries(conn)})
                 if path == "/api/runs":
                     return self._send(200, {"items": db.rows(conn.execute(
                         "SELECT * FROM runs ORDER BY id DESC LIMIT 50"))})
@@ -586,6 +589,16 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(200, api_search(conn, self._body()))
                 if path.startswith("/api/alerts"):
                     return self._send(200, api_alerts_post(conn, path, self._body()))
+                if path == "/api/blacklist":
+                    b = self._body()
+                    if b.get("fingerprint"):
+                        return self._send(200, blacklist.add_issue(conn, str(b["fingerprint"]), b.get("note", "")))
+                    return self._send(200, blacklist.add_text(conn, b.get("text", ""), b.get("service", ""),
+                                                              b.get("note", "")))
+                m = re.fullmatch(r"/api/blacklist/(\d+)/delete", path)
+                if m:
+                    blacklist.remove(conn, int(m.group(1)))
+                    return self._send(200, {"ok": True})
                 if collector is None and path.startswith(("/api/search/", "/api/backfill")):
                     b = self._body()
                     if path == "/api/search/prompt":

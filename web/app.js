@@ -389,8 +389,10 @@ function syncUrl(push = false) {
   const hash = buildHash();
   if (hash === urlHash && !push) return;
   urlHash = hash;
-  if (push) history.pushState({ issue: true }, "", hash);
-  else history.replaceState(history.state, "", hash);
+  try {
+    if (push) history.pushState({ issue: true }, "", hash);
+    else history.replaceState(history.state, "", hash);
+  } catch { /* Safari limita ~100 chamadas/30s (digitando na busca) */ }
 }
 // Aplica filtros/período da URL ao estado e aos controles; diz se algo mudou (precisa recarregar os dados)
 function readHashState(p) {

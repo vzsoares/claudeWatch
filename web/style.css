@@ -59,6 +59,7 @@ h3 { font-size: 13px; color: var(--ink-2); margin-bottom: 8px; }
 .muted { color: var(--muted); }
 .small { font-size: 12px; font-weight: 400; }
 .hidden { display: none !important; }
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .spacer { flex: 1; }
 
 /* ---------- topo ---------- */
@@ -240,6 +241,7 @@ pre.log {
 /* ---------- modais ---------- */
 .modal { position: fixed; inset: 0; display: none; place-items: center; z-index: 50; background: rgba(0,0,0,.45); padding: 16px; }
 .modal.show { display: grid; }
+#alarmsModal { z-index: 75; }   /* acima do dock de alarmes (70), abaixo do explicar (85) */
 #promptModal { z-index: 55; }   /* abre por cima da busca */
 .modal-box {
   background: var(--page); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow);

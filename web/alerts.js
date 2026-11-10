@@ -7,6 +7,7 @@ const alarm = {
   active: [],          // disparos não reconhecidos
   notify: true, sound: false,
   seen: new Set(),     // ids já notificados (som/notificação só uma vez)
+  acking: new Set(),   // ids com reconhecimento em andamento: uma consulta antiga não os traz de volta
   firstPoll: true,
   titleTimer: null, baseTitle: "",
   minimized: store.get("alertsMinimized", false),
@@ -19,7 +20,13 @@ const OPEN_BY_DEFAULT = 3;  // os mais novos aparecem abertos; os demais, compac
 // ------------------------------------------------------------------ cartões no canto
 function onAlerts(summary) {
   if (!summary) return;
-  alarm.active = summary.active || [];
+  const active = summary.active || [];
+  for (const id of alarm.acking) if (!active.some((a) => a.id === id)) alarm.acking.delete(id);
+  showAlerts({ ...summary, active: active.filter((a) => !alarm.acking.has(a.id)) });
+}
+
+function showAlerts(summary) {
+  alarm.active = summary.active;
   alarm.notify = summary.notify;
   alarm.sound = summary.sound;
 
@@ -30,6 +37,7 @@ function onAlerts(summary) {
     if (alarm.sound) playAlarmSound(fresh[0].severity);
     if (alarm.notify) systemNotify(fresh[0], fresh.length);
     setAlertsMinimized(false);  // alerta novo reabre a bandeja
+    $("alertAnnounce").textContent = fresh.map((a) => a.title).join(". ");
   }
   alarm.firstPoll = false;
   const key = alarm.active.map((a) => a.id).join();
@@ -158,20 +166,24 @@ function flashTitle(on) {
   if (!document.title.startsWith("🚨")) alarm.baseTitle = document.title;
 }
 
-// a = null reconhece todos
+// a = null reconhece todos; devolve se o servidor aceitou
 async function ackAlert(a) {
+  const ids = a ? [a.id] : alarm.active.map((x) => x.id);
+  ids.forEach((id) => alarm.acking.add(id));
   try {
     await api(a ? `/api/alerts/${a.id}/ack` : "/api/alerts/ack-all", { method: "POST" });
   } catch (e) {
+    ids.forEach((id) => alarm.acking.delete(id));
     toast(`Não consegui reconhecer: ${esc(e.message)}`, "critical");
-    return;
+    return false;
   }
-  onAlerts({ active: a ? alarm.active.filter((x) => x.id !== a.id) : [], notify: alarm.notify, sound: alarm.sound });
+  showAlerts({ active: alarm.active.filter((x) => !alarm.acking.has(x.id)), notify: alarm.notify, sound: alarm.sound });
   pollStatus();
+  return true;
 }
 
 async function viewAlert(a) {
-  await ackAlert(a);
+  if (!(await ackAlert(a))) return;
   if (a.fingerprint) loadIssue(a.fingerprint);
   else if (a.service) { state.service = a.service; loadAll(); }
 }

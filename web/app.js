@@ -362,7 +362,8 @@ function renderActiveFilters() {
 }
 
 // ------------------------------------------------------------------ estado na URL
-// #issue=…&period=24h&service=…&category=…&status=…&q=…&search=…&scope=aws&srange=…&panel=alarms|history
+// #issue=…&period=24h&service=…&category=…&status=…&q=…&panel=alarms|history
+// O texto da busca (modal) não vai para a URL, para não vazar em links copiados: fica no sessionStorage.
 const RANGES = ["1h", "6h", "24h", "7d", "30d"];
 const STATUSES = ["open", "resolved", "ignored", "all"];
 let urlHash = "";
@@ -374,12 +375,6 @@ function buildHash() {
   if (state.category) p.set("category", state.category);
   if (state.status !== "open") p.set("status", state.status);
   if (state.q) p.set("q", state.q);
-  if ($("searchModal").classList.contains("show")) {
-    const f = $("searchForm").elements;
-    p.set("search", f.text.value.trim());
-    if (f.aws.checked) p.set("scope", "aws");
-    if (f.range.value !== "24h") p.set("srange", f.range.value);
-  }
   if ($("alarmsModal").classList.contains("show")) p.set("panel", "alarms");
   else if (typeof alertHistoryVisible === "function" && alertHistoryVisible()) p.set("panel", "history");
   return `#${p}`;
@@ -391,8 +386,34 @@ function syncUrl(push = false) {
   urlHash = hash;
   try {
     if (push) history.pushState({ issue: true }, "", hash);
-    else history.replaceState(history.state, "", hash);
+    else history.replaceState(null, "", hash);
   } catch { /* Safari limita ~100 chamadas/30s (digitando na busca) */ }
+}
+const SEARCH_KEY = "searchModal";
+function saveSearchState() {
+  try {
+    if (!$("searchModal").classList.contains("show")) { sessionStorage.removeItem(SEARCH_KEY); return; }
+    const f = $("searchForm").elements;
+    sessionStorage.setItem(SEARCH_KEY, JSON.stringify({ text: f.text.value.trim(), aws: f.aws.checked, range: f.range.value }));
+  } catch { /* sem storage */ }
+}
+function restoreSearchState() {
+  try {
+    const s = JSON.parse(sessionStorage.getItem(SEARCH_KEY));
+    if (typeof s?.text === "string") applySearchState(s.text, s.aws === true, String(s.range));
+  } catch { /* sem storage ou valor inválido */ }
+}
+function applySearchState(text, aws, range) {
+  const f = $("searchForm").elements;
+  const same = $("searchModal").classList.contains("show") && f.text.value.trim() === text && f.aws.checked === aws && f.range.value === range;
+  if (same) return;
+  f.text.value = text;
+  f.aws.checked = aws;
+  $("awsWarning").classList.toggle("hidden", !aws);
+  if ([...f.range.options].some((o) => o.value === range)) f.range.value = range;
+  openSearch();
+  // a busca local roda sozinha; a da AWS espera o clique, porque gera custo
+  if (!aws && text.length >= 2) runSearch();
 }
 // Aplica filtros/período da URL ao estado e aos controles; diz se algo mudou (precisa recarregar os dados)
 function readHashState(p) {
@@ -414,24 +435,10 @@ function applyHashViews(p) {
   if (issue && issue !== state.issue) loadIssue(issue, true, false);
   else if (!issue && state.issue) closeDrawer(false);
 
-  const searchOpen = $("searchModal").classList.contains("show");
+  // link antigo com search=: aplica uma vez e reescreve a URL sem ele
   if (p.has("search")) {
-    const f = $("searchForm").elements;
-    const text = p.get("search");
-    const aws = p.get("scope") === "aws";
-    const range = p.get("srange") || "24h";
-    const same = searchOpen && f.text.value.trim() === text && f.aws.checked === aws && f.range.value === range;
-    if (!same) {
-      f.text.value = text;
-      f.aws.checked = aws;
-      $("awsWarning").classList.toggle("hidden", !aws);
-      if ([...f.range.options].some((o) => o.value === range)) f.range.value = range;
-      openSearch();
-      // a busca local roda sozinha; a da AWS espera o clique, porque gera custo
-      if (!aws && text.length >= 2) runSearch();
-    }
-  } else if (searchOpen) {
-    $("searchModal").classList.remove("show");
+    applySearchState(p.get("search"), p.get("scope") === "aws", p.get("srange") || "24h");
+    syncUrl();
   }
 
   const panel = p.get("panel");
@@ -705,8 +712,7 @@ function closeDrawer(updateUrl = true) {
   $("drawer").setAttribute("aria-hidden", "true");
   $("backdrop").classList.remove("show");
   if (!updateUrl || !wasOpen) return;
-  if (history.state?.issue) history.back();   // desfaz a entrada criada ao abrir a issue
-  else syncUrl();
+  syncUrl();
 }
 async function setIssueStatus(status) {
   try {
@@ -891,9 +897,9 @@ function bind() {
   });
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => loadAll());
   // modais fecham por vários caminhos (✕, fundo, Esc, código): observa a classe em vez de cada um
-  const watchModal = new MutationObserver(() => syncUrl());
+  const watchModal = new MutationObserver(() => { saveSearchState(); syncUrl(); });
   for (const id of ["searchModal", "alarmsModal"]) watchModal.observe($(id), { attributes: true, attributeFilter: ["class"] });
-  $("searchForm").addEventListener("input", () => syncUrl());
+  $("searchForm").addEventListener("input", saveSearchState);
   window.addEventListener("hashchange", onHashChange);
   window.addEventListener("popstate", onHashChange);
 }
@@ -911,6 +917,7 @@ function bind() {
   await pollStatus();
   await loadAll();
   applyHashViews(fromUrl);
+  if (!fromUrl.has("search")) restoreSearchState();
   setInterval(pollStatus, 5000);
   setInterval(renderCollector, 1000);
   setInterval(loadAll, 60000);

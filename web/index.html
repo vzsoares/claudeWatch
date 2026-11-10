@@ -289,6 +289,7 @@
 </div>
 
 <!-- Avisos de alarme: cartões no canto, sem bloquear o painel, até serem reconhecidos -->
+<div class="sr-only" id="alertAnnounce" role="status" aria-live="polite"></div>
 <div class="alert-dock hidden" id="alertDock">
   <section class="alert-tray hidden" id="alertTray" role="region" aria-label="Alarmes na tela">
     <div class="alert-tray-head">
@@ -300,7 +301,7 @@
       <button class="btn" id="alertAckAll">✓ Reconhecer todos</button>
       <button class="btn icon" id="alertMinimize" title="Minimizar" aria-label="Minimizar">–</button>
     </div>
-    <ul class="alert-list" id="alertList" aria-live="assertive"></ul>
+    <ul class="alert-list" id="alertList"></ul>
     <ul class="alert-list alert-history hidden" id="alertHistoryList"></ul>
   </section>
   <button class="alert-pill hidden" id="alertPill" title="Mostrar os alarmes"></button>

@@ -342,7 +342,8 @@ function bindAlarms() {
     if (b) { showAlertHistory(b.dataset.tab === "history"); syncUrl(); }
   });
   $("alertMinimize").addEventListener("click", () => {
-    if (alarm.active.length) setAlertsMinimized(true); else alarm.tab = "active";
+    alarm.tab = "active";
+    if (alarm.active.length) setAlertsMinimized(true);
     renderAlertDock();
     syncUrl();
   });
